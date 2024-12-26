@@ -150,22 +150,23 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							onClick={() => setIsTaskExpanded(!isTaskExpanded)}>
 							<span className={`codicon codicon-chevron-${isTaskExpanded ? "down" : "right"}`}></span>
 						</div>
-						<ModelIdentifier 
-							modelName={`${selectedProvider.split('-')[0].charAt(0).toUpperCase() + selectedProvider.split('-')[0].slice(1)} ${selectedModelId}`} 
-						/>
 						<div
 							style={{
-								marginLeft: 6,
-								whiteSpace: "nowrap",
-								overflow: "hidden",
-								textOverflow: "ellipsis",
+								display: 'flex',
+								alignItems: 'center',
 								flexGrow: 1,
 								minWidth: 0, // This allows the div to shrink below its content size
 							}}>
-							<span style={{ fontWeight: "bold" }}>Task{!isTaskExpanded && ":"}</span>
-							{!isTaskExpanded && (
-								<span style={{ marginLeft: 4 }}>{highlightMentions(task.text, false)}</span>
-							)}
+							<span style={{ fontWeight: "bold", marginRight: '8px' }}>Task{!isTaskExpanded && ":"}</span>
+							<div style={{ 
+								flexGrow: 1, 
+								display: 'flex', 
+								justifyContent: 'center' 
+							}}>
+								<ModelIdentifier 
+									modelName={`${selectedProvider.split('-')[0].charAt(0).toUpperCase() + selectedProvider.split('-')[0].slice(1)} ${selectedModelId}`} 
+								/>
+							</div>
 						</div>
 					</div>
 					{!isTaskExpanded && isCostAvailable && (
