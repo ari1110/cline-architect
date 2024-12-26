@@ -12,6 +12,7 @@ import { COMMAND_OUTPUT_STRING, COMMAND_REQ_APP_STRING } from "../../../../src/s
 import { useExtensionState } from "../../context/ExtensionStateContext"
 import { findMatchingResourceOrTemplate } from "../../utils/mcp"
 import { vscode } from "../../utils/vscode"
+import StaticModelIdentifier, { ModelNameProvider } from "./StaticModelIdentifier"
 import CodeAccordian, { removeLeadingNonAlphanumeric } from "../common/CodeAccordian"
 import CodeBlock, { CODE_BLOCK_BG_COLOR } from "../common/CodeBlock"
 import MarkdownBlock from "../common/MarkdownBlock"
@@ -70,6 +71,27 @@ const ChatRow = memo(
 export default ChatRow
 
 export const ChatRowContent = ({
+	message,
+	isExpanded,
+	onToggleExpand,
+	lastModifiedMessage,
+	isLast,
+}: ChatRowContentProps) => {
+	// Wrap the entire component with ModelNameProvider to manage model name state
+	return (
+		<ModelNameProvider>
+			<ChatRowContentInner 
+				message={message}
+				isExpanded={isExpanded}
+				onToggleExpand={onToggleExpand}
+				lastModifiedMessage={lastModifiedMessage}
+				isLast={isLast}
+			/>
+		</ModelNameProvider>
+	)
+}
+
+const ChatRowContentInner = ({
 	message,
 	isExpanded,
 	onToggleExpand,
@@ -746,11 +768,16 @@ export const ChatRowContent = ({
 				case "api_req_finished":
 					return null // we should never see this message type
 				case "text":
-					return (
-						<div>
-							<Markdown markdown={message.text} />
-						</div>
-					)
+	return (
+		<div>
+			{message.say === "text" && (
+				<div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+					<StaticModelIdentifier timestamp={message.ts} />
+				</div>
+			)}
+			<Markdown markdown={message.text} />
+		</div>
+	)
 				case "user_feedback":
 					return (
 						<div

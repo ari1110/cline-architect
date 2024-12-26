@@ -5,8 +5,10 @@ import { ClineMessage } from "../../../../src/shared/ExtensionMessage"
 import { useExtensionState } from "../../context/ExtensionStateContext"
 import { vscode } from "../../utils/vscode"
 import Thumbnails from "../common/Thumbnails"
+import ModelIdentifier from "./ModelIdentifier"
 import { mentionRegexGlobal } from "../../../../src/shared/context-mentions"
 import { formatLargeNumber } from "../../utils/format"
+import { normalizeApiConfiguration } from "../settings/ApiOptions"
 
 interface TaskHeaderProps {
 	task: ClineMessage
@@ -92,14 +94,16 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		}
 	}, [task.text, windowWidth])
 
-	const isCostAvailable = useMemo(() => {
-		return (
+	const { selectedProvider, selectedModelId, selectedModelInfo, isCostAvailable } = useMemo(() => {
+		const { selectedProvider, selectedModelId, selectedModelInfo } = normalizeApiConfiguration(apiConfiguration)
+		const isCostAvailable = (
 			apiConfiguration?.apiProvider !== "openai" &&
 			apiConfiguration?.apiProvider !== "ollama" &&
 			apiConfiguration?.apiProvider !== "lmstudio" &&
 			apiConfiguration?.apiProvider !== "gemini"
 		)
-	}, [apiConfiguration?.apiProvider])
+		return { selectedProvider, selectedModelId, selectedModelInfo, isCostAvailable }
+	}, [apiConfiguration])
 
 	const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
 
@@ -125,34 +129,44 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 					}}>
 					<div
 						style={{
-							display: "flex",
-							alignItems: "center",
-							cursor: "pointer",
-							marginLeft: -2,
-							userSelect: "none",
-							WebkitUserSelect: "none",
-							MozUserSelect: "none",
-							msUserSelect: "none",
-							flexGrow: 1,
-							minWidth: 0, // This allows the div to shrink below its content size
+						display: "flex",
+						alignItems: "center",
+						gap: "8px",
+						flexGrow: 1,
+						minWidth: 0 // This allows the div to shrink below its content size
 						}}
 						onClick={() => setIsTaskExpanded(!isTaskExpanded)}>
-						<div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+						<div 
+							style={{ 
+								display: "flex",
+								alignItems: "center",
+								cursor: "pointer",
+								userSelect: "none",
+								WebkitUserSelect: "none",
+								MozUserSelect: "none",
+								msUserSelect: "none",
+								flexShrink: 0
+							}}
+							onClick={() => setIsTaskExpanded(!isTaskExpanded)}>
 							<span className={`codicon codicon-chevron-${isTaskExpanded ? "down" : "right"}`}></span>
 						</div>
 						<div
 							style={{
-								marginLeft: 6,
-								whiteSpace: "nowrap",
-								overflow: "hidden",
-								textOverflow: "ellipsis",
+								display: 'flex',
+								alignItems: 'center',
 								flexGrow: 1,
 								minWidth: 0, // This allows the div to shrink below its content size
 							}}>
-							<span style={{ fontWeight: "bold" }}>Task{!isTaskExpanded && ":"}</span>
-							{!isTaskExpanded && (
-								<span style={{ marginLeft: 4 }}>{highlightMentions(task.text, false)}</span>
-							)}
+							<span style={{ fontWeight: "bold", marginRight: '8px' }}>Task{!isTaskExpanded && ":"}</span>
+							<div style={{ 
+								flexGrow: 1, 
+								display: 'flex', 
+								justifyContent: 'center' 
+							}}>
+								<ModelIdentifier 
+									modelName={`${selectedProvider.split('-')[0].charAt(0).toUpperCase() + selectedProvider.split('-')[0].slice(1)} ${selectedModelId}`} 
+								/>
+							</div>
 						</div>
 					</div>
 					{!isTaskExpanded && isCostAvailable && (

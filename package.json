@@ -1,6 +1,6 @@
 {
 	"name": "claude-dev",
-	"displayName": "Cline (prev. Claude Dev)",
+	"displayName": "Cline",
 	"description": "Autonomous coding agent right in your IDE, capable of creating/editing files, running commands, using the browser, and more with your permission every step of the way.",
 	"version": "3.0.6",
 	"icon": "assets/icons/icon.png",
@@ -145,16 +145,19 @@
 		"start:webview": "cd webview-ui && npm run start",
 		"build:webview": "cd webview-ui && npm run build",
 		"test:webview": "cd webview-ui && npm run test",
-		"publish:marketplace": "vsce publish && ovsx publish"
+		"publish:marketplace": "vsce publish && ovsx publish",
+		"dev": "npm-run-all -p watch start:webview",
+		"clean": "rm -rf dist out node_modules webview-ui/node_modules",
+		"reinstall": "npm run clean && npm run install:all"
 	},
 	"devDependencies": {
 		"@types/diff": "^5.2.1",
 		"@types/mocha": "^10.0.7",
 		"@types/node": "20.x",
+		"@types/vscode": "^1.87.0",
+		"@typescript-eslint/eslint-plugin": "^7.2.0",
+		"@typescript-eslint/parser": "^7.2.0",
 		"@types/should": "^11.2.0",
-		"@types/vscode": "^1.84.0",
-		"@typescript-eslint/eslint-plugin": "^7.14.1",
-		"@typescript-eslint/parser": "^7.11.0",
 		"@vscode/test-cli": "^0.0.9",
 		"@vscode/test-electron": "^2.4.0",
 		"esbuild": "^0.21.5",
