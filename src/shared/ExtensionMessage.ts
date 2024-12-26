@@ -19,6 +19,7 @@ export interface ExtensionMessage {
 		| "partialMessage"
 		| "openRouterModels"
 		| "mcpServers"
+		| "debug_log"
 	text?: string
 	action?:
 		| "chatButtonClicked"
