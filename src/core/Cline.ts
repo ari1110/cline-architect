@@ -18,7 +18,8 @@ import { UrlContentFetcher } from "../services/browser/UrlContentFetcher"
 import { listFiles } from "../services/glob/list-files"
 import { regexSearchFiles } from "../services/ripgrep"
 import { parseSourceCodeForDefinitionsTopLevel } from "../services/tree-sitter"
-import { ApiConfiguration } from "../shared/api"
+import { ApiConfiguration, ApiProvider } from "../shared/api"
+import { ConversationState } from "./conversation-state"
 import { findLastIndex } from "../shared/array"
 import { AutoApprovalSettings } from "../shared/AutoApprovalSettings"
 import { combineApiRequests } from "../shared/combineApiRequests"
@@ -50,6 +51,7 @@ import { addUserInstructions, SYSTEM_PROMPT } from "./prompts/system"
 import { truncateHalfConversation } from "./sliding-window"
 import { ClineProvider, GlobalFileNames } from "./webview/ClineProvider"
 import { showSystemNotification } from "../integrations/notifications"
+import { ConfigurationTarget } from "vscode"
 
 const cwd =
 	vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop") // may or may not exist but fs checking existence would immediately ask for permission which would be bad UX, need to come up with a better solution
@@ -62,6 +64,8 @@ type UserContent = Array<
 export class Cline {
 	readonly taskId: string
 	api: ApiHandler
+	private apiConfiguration: ApiConfiguration
+	private conversationState: ConversationState
 	private terminalManager: TerminalManager
 	private urlContentFetcher: UrlContentFetcher
 	private browserSession: BrowserSession
@@ -103,6 +107,8 @@ export class Cline {
 		historyItem?: HistoryItem,
 	) {
 		this.providerRef = new WeakRef(provider)
+		this.apiConfiguration = apiConfiguration
+		this.conversationState = new ConversationState(historyItem?.modelChanges)
 		this.api = buildApiHandler(apiConfiguration)
 		this.terminalManager = new TerminalManager()
 		this.urlContentFetcher = new UrlContentFetcher(provider.context)
@@ -180,6 +186,7 @@ export class Cline {
 
 	private async addToClineMessages(message: ClineMessage) {
 		this.clineMessages.push(message)
+		this.conversationState.addMessage(message)
 		await this.saveClineMessages()
 	}
 
@@ -202,6 +209,8 @@ export class Cline {
 						(m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"),
 					)
 				]
+			const model = this.api.getModel()
+			const lastModel = this.conversationState.getModelForMessage(lastRelevantMessage.ts)
 			await this.providerRef.deref()?.updateTaskHistory({
 				id: this.taskId,
 				ts: lastRelevantMessage.ts,
@@ -211,6 +220,9 @@ export class Cline {
 				cacheWrites: apiMetrics.totalCacheWrites,
 				cacheReads: apiMetrics.totalCacheReads,
 				totalCost: apiMetrics.totalCost,
+				modelId: lastModel?.modelId || model.id,
+				modelProvider: lastModel?.modelProvider || this.apiConfiguration.apiProvider,
+				modelChanges: this.conversationState.getModelChanges(),
 			})
 		} catch (error) {
 			console.error("Failed to save cline messages:", error)
@@ -2279,6 +2291,15 @@ export class Cline {
 		// get previous api req's index to check token usage and determine if we need to truncate conversation history
 		const previousApiReqIndex = findLastIndex(this.clineMessages, (m) => m.say === "api_req_started")
 
+		// Record model change before creating any messages
+		const model = this.api.getModel()
+		if (model.id && this.apiConfiguration.apiProvider) {
+			const currentModel = this.conversationState.getCurrentModel()
+			if (!currentModel || currentModel.modelId !== model.id || currentModel.modelProvider !== this.apiConfiguration.apiProvider) {
+				this.conversationState.recordModelChange(model.id, this.apiConfiguration.apiProvider, Date.now())
+			}
+		}
+
 		// getting verbose details is an expensive operation, it uses globby to top-down build file structure of project which for large projects can take a few seconds
 		// for the best UX we show a placeholder api_req_started message with a loading spinner as this happens
 		await this.say(
@@ -2286,6 +2307,8 @@ export class Cline {
 			JSON.stringify({
 				request:
 					userContent.map((block) => formatContentBlockToMarkdown(block)).join("\n\n") + "\n\nLoading...",
+				modelId: model.id,
+				modelProvider: this.apiConfiguration.apiProvider
 			}),
 		)
 
@@ -2321,17 +2344,17 @@ export class Cline {
 					tokensOut: outputTokens,
 					cacheWrites: cacheWriteTokens,
 					cacheReads: cacheReadTokens,
-					cost:
-						totalCost ??
-						calculateApiCost(
-							this.api.getModel().info,
-							inputTokens,
-							outputTokens,
-							cacheWriteTokens,
-							cacheReadTokens,
-						),
+					cost: totalCost ?? calculateApiCost(
+						model.info,
+						inputTokens,
+						outputTokens,
+						cacheWriteTokens,
+						cacheReadTokens,
+					),
 					cancelReason,
 					streamingFailedMessage,
+					modelId: model.id,
+					modelProvider: this.apiConfiguration.apiProvider,
 				} satisfies ClineApiReqInfo)
 			}
 

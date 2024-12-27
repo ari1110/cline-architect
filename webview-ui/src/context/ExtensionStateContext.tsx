@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { useEvent } from "react-use"
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "../../../src/shared/AutoApprovalSettings"
 import { ExtensionMessage, ExtensionState } from "../../../src/shared/ExtensionMessage"
+import { HistoryItem } from "../../../src/shared/HistoryItem"
 import {
 	ApiConfiguration,
 	ModelInfo,
@@ -20,6 +21,9 @@ interface ExtensionStateContextType extends ExtensionState {
 	openRouterModels: Record<string, ModelInfo>
 	mcpServers: McpServer[]
 	filePaths: string[]
+	currentTask?: {
+		historyItem: HistoryItem
+	}
 	setApiConfiguration: (config: ApiConfiguration) => void
 	setCustomInstructions: (value?: string) => void
 	setShowAnnouncement: (value: boolean) => void

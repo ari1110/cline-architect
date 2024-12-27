@@ -57,6 +57,8 @@ export interface ClineMessage {
 	text?: string
 	images?: string[]
 	partial?: boolean
+	modelId?: string
+	modelProvider?: string
 }
 
 export type ClineAsk =
@@ -145,6 +147,8 @@ export interface ClineApiReqInfo {
 	cost?: number
 	cancelReason?: ClineApiReqCancelReason
 	streamingFailedMessage?: string
+	modelId?: string
+	modelProvider?: string
 }
 
 export type ClineApiReqCancelReason = "streaming_failed" | "user_cancelled"

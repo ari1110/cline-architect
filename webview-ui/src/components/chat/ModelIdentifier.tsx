@@ -13,12 +13,12 @@ const Container = styled.div`
 	background-color: color-mix(in srgb, var(--vscode-badge-foreground) 15%, transparent);
 	border-radius: 3px;
 	margin-right: 8px;
-	font-size: 11px;
+	font-size: 12px;
 	flex-shrink: 0;
 `
 
 const Icon = styled.span`
-	font-size: 12px;
+	font-size: 14px;
 `
 
 const ModelIdentifier = ({ modelName }: ModelIdentifierProps) => {

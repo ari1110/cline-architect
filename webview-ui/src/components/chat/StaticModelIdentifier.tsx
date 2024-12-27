@@ -1,80 +1,65 @@
-import React, { createContext, useContext, useRef, useMemo } from 'react'
-import ModelIdentifier from './ModelIdentifier'
+import React, { memo, useMemo } from 'react'
+import styled from 'styled-components'
 import { useExtensionState } from '../../context/ExtensionStateContext'
-import { normalizeApiConfiguration } from '../settings/ApiOptions'
+import { ModelTracker } from '../../../../src/shared/model-tracking'
 
-// Create a context to manage model name storage
-const ModelNameContext = createContext<{
-    storeModelName: (timestamp: number, modelName: string) => void
-    getModelName: (timestamp: number) => string
-}>({
-    storeModelName: () => {},
-    getModelName: () => 'Unknown Model'
-})
+const Container = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 6px;
+	background-color: color-mix(in srgb, var(--vscode-badge-foreground) 15%, transparent);
+	border-radius: 3px;
+	margin-right: 8px;
+    margin-bottom: 6px;
+	font-size: 11px;
+	flex-shrink: 0;
+	width: fit-content;
+`
 
-export const ModelNameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const modelNameRef = useRef<{ [key: number]: string }>({})
-
-    const storeModelName = (timestamp: number, modelName: string) => {
-        // Ensure we only store the model name if it hasn't been stored before
-        if (!modelNameRef.current[timestamp]) {
-            modelNameRef.current[timestamp] = modelName
-        }
-    }
-
-    const getModelName = (timestamp: number) => {
-        // Find the closest previous timestamp with a stored model name
-        const prevTimestamp = Object.keys(modelNameRef.current)
-            .map(Number)
-            .filter(ts => ts <= timestamp)
-            .sort((a, b) => b - a)[0]
-        
-        return modelNameRef.current[prevTimestamp] || 'Unknown Model'
-    }
-
-    return (
-        <ModelNameContext.Provider value={{ storeModelName, getModelName }}>
-            {children}
-        </ModelNameContext.Provider>
-    )
-}
+const Icon = styled.span`
+    font-size: 14px;
+`
 
 interface StaticModelIdentifierProps {
     timestamp: number
+    modelProvider?: string
+    modelId?: string
 }
 
-export const StaticModelIdentifier: React.FC<StaticModelIdentifierProps> = ({ timestamp }) => {
-    const { apiConfiguration } = useExtensionState()
-    const { storeModelName, getModelName } = useContext(ModelNameContext)
+export const StaticModelIdentifier: React.FC<StaticModelIdentifierProps> = ({ timestamp, modelProvider, modelId }) => {
+    const { currentTask } = useExtensionState()
 
-    // When an API request starts, store the model name
-    React.useEffect(() => {
-        const { selectedProvider, selectedModelId } = normalizeApiConfiguration(apiConfiguration)
-        const modelName = `${selectedProvider}/${selectedModelId}`
-        storeModelName(timestamp, modelName)
-    }, [timestamp, apiConfiguration, storeModelName])
-
-    // Retrieve the stored model name for this timestamp
+    // Get the model name based on the timestamp and model changes
     const modelName = useMemo(() => {
-        const storedModelName = getModelName(timestamp)
-        // If no model name is stored, try to get the current model name
-        const fallbackModelName = (() => {
-            const { selectedProvider, selectedModelId } = normalizeApiConfiguration(apiConfiguration)
-            const formattedProvider = selectedProvider.split('-')[0].charAt(0).toUpperCase() + 
-                                      selectedProvider.split('-')[0].slice(1)
-            return `${formattedProvider} ${selectedModelId}`
-        })()
+        // If model info is provided directly (history view), use it
+        if (modelProvider && modelId) {
+            return `${modelProvider} ${modelId}`
+        }
 
-        return storedModelName !== 'Unknown Model' 
-            ? storedModelName 
-            : fallbackModelName
-    }, [timestamp, getModelName, apiConfiguration])
+        // Otherwise use model changes (chat view)
+        if (currentTask?.historyItem.modelChanges?.length) {
+            const modelTracker = new ModelTracker(currentTask.historyItem.modelChanges)
+            const model = modelTracker.getModelForTimestamp(timestamp)
+            if (model) {
+                return `${model.modelProvider} ${model.modelId}`
+            }
+        }
+
+        // Fallback to task's model info
+        if (currentTask?.historyItem.modelProvider && currentTask?.historyItem.modelId) {
+            return `${currentTask.historyItem.modelProvider} ${currentTask.historyItem.modelId}`
+        }
+
+        return 'Unknown Model'
+    }, [timestamp, currentTask?.historyItem, modelProvider, modelId])
 
     return (
-        <div style={{ marginBottom: '6px' }}>
-            <ModelIdentifier modelName={modelName} />
-        </div>
+        <Container>
+            <Icon className="codicon codicon-robot" />
+            <span>{modelName}</span>
+        </Container>
     )
 }
 
-export default StaticModelIdentifier
+export default memo(StaticModelIdentifier)

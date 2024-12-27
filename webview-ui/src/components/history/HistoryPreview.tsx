@@ -2,6 +2,7 @@ import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
 import { useExtensionState } from "../../context/ExtensionStateContext"
 import { vscode } from "../../utils/vscode"
 import { memo } from "react"
+import { StaticModelIdentifier } from "../chat/StaticModelIdentifier"
 import { formatLargeNumber } from "../../utils/format"
 
 type HistoryPreviewProps = {
@@ -107,25 +108,34 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 									{item.task}
 								</div>
 								<div style={{ fontSize: "0.85em", color: "var(--vscode-descriptionForeground)" }}>
-									<span>
-										Tokens: ↑{formatLargeNumber(item.tokensIn || 0)} ↓
-										{formatLargeNumber(item.tokensOut || 0)}
-									</span>
-									{!!item.cacheWrites && (
-										<>
-											{" • "}
-											<span>
-												Cache: +{formatLargeNumber(item.cacheWrites || 0)} →{" "}
-												{formatLargeNumber(item.cacheReads || 0)}
-											</span>
-										</>
-									)}
-									{!!item.totalCost && (
-										<>
-											{" • "}
-											<span>API Cost: ${item.totalCost?.toFixed(4)}</span>
-										</>
-									)}
+									<div style={{ display: "flex" }}>
+										<StaticModelIdentifier 
+											timestamp={item.ts}
+											modelProvider={item.modelProvider}
+											modelId={item.modelId}
+										/>
+									</div>
+									<div>
+										<span>
+											Tokens: ↑{formatLargeNumber(item.tokensIn || 0)} ↓
+											{formatLargeNumber(item.tokensOut || 0)}
+										</span>
+										{!!item.cacheWrites && (
+											<>
+												{" • "}
+												<span>
+													Cache: +{formatLargeNumber(item.cacheWrites || 0)} →{" "}
+													{formatLargeNumber(item.cacheReads || 0)}
+												</span>
+											</>
+										)}
+										{!!item.totalCost && (
+											<>
+												{" • "}
+												<span>API Cost: ${item.totalCost?.toFixed(4)}</span>
+											</>
+										)}
+									</div>
 								</div>
 							</div>
 						</div>

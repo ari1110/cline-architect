@@ -12,7 +12,7 @@ import { COMMAND_OUTPUT_STRING, COMMAND_REQ_APP_STRING } from "../../../../src/s
 import { useExtensionState } from "../../context/ExtensionStateContext"
 import { findMatchingResourceOrTemplate } from "../../utils/mcp"
 import { vscode } from "../../utils/vscode"
-import StaticModelIdentifier, { ModelNameProvider } from "./StaticModelIdentifier"
+import MessageModelIdentifier from "./MessageModelIdentifier"
 import CodeAccordian, { removeLeadingNonAlphanumeric } from "../common/CodeAccordian"
 import CodeBlock, { CODE_BLOCK_BG_COLOR } from "../common/CodeBlock"
 import MarkdownBlock from "../common/MarkdownBlock"
@@ -77,18 +77,7 @@ export const ChatRowContent = ({
 	lastModifiedMessage,
 	isLast,
 }: ChatRowContentProps) => {
-	// Wrap the entire component with ModelNameProvider to manage model name state
-	return (
-		<ModelNameProvider>
-			<ChatRowContentInner 
-				message={message}
-				isExpanded={isExpanded}
-				onToggleExpand={onToggleExpand}
-				lastModifiedMessage={lastModifiedMessage}
-				isLast={isLast}
-			/>
-		</ModelNameProvider>
-	)
+	return <ChatRowContentInner {...{ message, isExpanded, onToggleExpand, lastModifiedMessage, isLast }} />
 }
 
 const ChatRowContentInner = ({
@@ -768,16 +757,16 @@ const ChatRowContentInner = ({
 				case "api_req_finished":
 					return null // we should never see this message type
 				case "text":
-	return (
-		<div>
-			{message.say === "text" && (
-				<div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
-					<StaticModelIdentifier timestamp={message.ts} />
-				</div>
-			)}
-			<Markdown markdown={message.text} />
-		</div>
-	)
+					return (
+						<div>
+							{message.say === "text" && (
+								<div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+                            <MessageModelIdentifier timestamp={message.ts} />
+								</div>
+							)}
+							<Markdown markdown={message.text} />
+						</div>
+					)
 				case "user_feedback":
 					return (
 						<div

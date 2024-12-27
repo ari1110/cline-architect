@@ -1,3 +1,5 @@
+import { ModelChange } from "./model-tracking"
+
 export type HistoryItem = {
 	id: string
 	ts: number
@@ -7,4 +9,7 @@ export type HistoryItem = {
 	cacheWrites?: number
 	cacheReads?: number
 	totalCost: number
+	modelId?: string
+	modelProvider?: string
+	modelChanges?: ModelChange[] // Track model changes during the conversation
 }

@@ -3,6 +3,7 @@ import { useExtensionState } from "../../context/ExtensionStateContext"
 import { vscode } from "../../utils/vscode"
 import { Virtuoso } from "react-virtuoso"
 import { memo, useMemo, useState, useEffect } from "react"
+import { StaticModelIdentifier } from "../chat/StaticModelIdentifier"
 import Fuse, { FuseResult } from "fuse.js"
 import { formatLargeNumber } from "../../utils/format"
 
@@ -272,6 +273,11 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 										dangerouslySetInnerHTML={{ __html: item.task }}
 									/>
 									<div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+										<StaticModelIdentifier 
+											timestamp={item.ts}
+											modelProvider={item.modelProvider}
+											modelId={item.modelId}
+										/>
 										<div
 											style={{
 												display: "flex",
