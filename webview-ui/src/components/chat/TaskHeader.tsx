@@ -217,7 +217,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                         </div>
                                                 </div>
                                         </div>
-                                        {!isTaskExpanded && isCostAvailable && totalStats && (
+                                        {!isTaskExpanded && isCostAvailable && (
                                                 <div
                                                         style={{
                                                                 marginLeft: 10,
@@ -230,7 +230,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                 display: "inline-block",
                                                                 flexShrink: 0,
                                                         }}>
-                                                        ${totalStats.cost.toFixed(4)}
+                                                        ${totalCost.toFixed(4)}
                                                 </div>
                                         )}
                                         <VSCodeButton appearance="icon" onClick={onClose} style={{ marginLeft: 6, flexShrink: 0 }}>
@@ -314,7 +314,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                         justifyContent: "space-between",
                                                                         alignItems: "center",
                                                                 }}>
-                                                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                                                                         <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
                                                                                         <span style={{ fontWeight: "bold" }}>Total Tokens:</span>
@@ -323,19 +323,19 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                                         className="codicon codicon-arrow-up"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(totalStats?.tokensIn || 0)}
+                                                                                                {formatLargeNumber(tokensIn)}
                                                                                         </span>
                                                                                         <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                                                                                 <i
                                                                                                         className="codicon codicon-arrow-down"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(totalStats?.tokensOut || 0)}
+                                                                                                {formatLargeNumber(tokensOut)}
                                                                                         </span>
                                                                                 </div>
                                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                                                                         <span style={{ fontWeight: "bold" }}>Total Cost:</span>
-                                                                                        <span>${totalStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                                        <span>${totalCost.toFixed(4)}</span>
                                                                                 </div>
                                                                         </div>
                                                                         <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", opacity: 0.8 }}>
@@ -346,19 +346,19 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                                         className="codicon codicon-arrow-up"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(currentModelStats?.tokensIn || 0)}
+                                                                                                {formatLargeNumber(currentModelStats?.tokensIn || tokensIn)}
                                                                                         </span>
                                                                                         <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                                                                                 <i
                                                                                                         className="codicon codicon-arrow-down"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(currentModelStats?.tokensOut || 0)}
+                                                                                                {formatLargeNumber(currentModelStats?.tokensOut || tokensOut)}
                                                                                         </span>
                                                                                 </div>
                                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                                                                         <span style={{ fontWeight: "bold" }}>Cost:</span>
-                                                                                        <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                                        <span>${currentModelStats?.cost.toFixed(4) || totalCost.toFixed(4)}</span>
                                                                                 </div>
                                                                         </div>
                                                                 </div>
@@ -386,39 +386,26 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                         )}
                                                         {isCostAvailable && (
                                                                 <>
-                                                                        <div
-                                                                                style={{
-                                                                                        display: "flex",
-                                                                                        justifyContent: "space-between",
-                                                                                        alignItems: "center",
-                                                                                }}>
-                                                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                                                                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                                                                <span style={{ fontWeight: "bold" }}>Total Cost:</span>
-                                                                                                <span>${totalStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                        <div style={{ 
+                                                                                display: "flex", 
+                                                                                gap: "8px",
+                                                                                marginLeft: "auto"
+                                                                        }}>
+                                                                                {modelChanges && modelChanges.length > 1 && (
+                                                                                        <div
+                                                                                                onClick={() => setIsModelStatsExpanded(!isModelStatsExpanded)}
+                                                                                                style={{
+                                                                                                        cursor: "pointer",
+                                                                                                        display: "flex",
+                                                                                                        alignItems: "center",
+                                                                                                        gap: "4px",
+                                                                                                        color: "var(--vscode-textLink-foreground)",
+                                                                                                }}>
+                                                                                                <span className={`codicon codicon-chevron-${isModelStatsExpanded ? "down" : "right"}`}></span>
+                                                                                                <span>Per Model Usage</span>
                                                                                         </div>
-                                                                                        <div style={{ display: "flex", alignItems: "center", gap: "4px", opacity: 0.8 }}>
-                                                                                                <span style={{ fontWeight: "bold" }}>Current Model:</span>
-                                                                                                <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
-                                                                                        </div>
-                                                                                </div>
-                                                                                <div style={{ display: "flex", gap: "8px" }}>
-                                                                                        {modelChanges && modelChanges.length > 1 && (
-                                                                                                <div
-                                                                                                        onClick={() => setIsModelStatsExpanded(!isModelStatsExpanded)}
-                                                                                                        style={{
-                                                                                                                cursor: "pointer",
-                                                                                                                display: "flex",
-                                                                                                                alignItems: "center",
-                                                                                                                gap: "4px",
-                                                                                                                color: "var(--vscode-textLink-foreground)",
-                                                                                                        }}>
-                                                                                                        <span className={`codicon codicon-chevron-${isModelStatsExpanded ? "down" : "right"}`}></span>
-                                                                                                        <span>Per Model Usage</span>
-                                                                                                </div>
-                                                                                        )}
-                                                                                        <ExportButton />
-                                                                                </div>
+                                                                                )}
+                                                                                <ExportButton />
                                                                         </div>
                                                                         {isModelStatsExpanded && (
                                                                                 <div style={{ 
