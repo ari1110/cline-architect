@@ -111,11 +111,13 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 
         const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
 
-        const perModelUsage = useMemo(() => {
+        const { currentModelStats, perModelUsage } = useMemo(() => {
                 if (!modelChanges || modelChanges.length === 0) {
-                        return null;
+                        return { currentModelStats: null, perModelUsage: null };
                 }
                 const usageMap: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
+                let currentModelStats = null;
+
                 modelChanges.forEach(change => {
                         if (change.usage) {
                                 const key = `${change.modelProvider}/${change.modelId}`;
@@ -125,9 +127,17 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                 usageMap[key].tokensIn += change.usage.tokensIn;
                                 usageMap[key].tokensOut += change.usage.tokensOut;
                                 usageMap[key].cost += change.usage.cost;
+
+                                // Track current model's stats
+                                if (change.modelProvider === selectedProvider && change.modelId === selectedModelId) {
+                                        currentModelStats = usageMap[key];
+                                }
                         }
                 });
-                return Object.entries(usageMap);
+                return { 
+                        currentModelStats,
+                        perModelUsage: Object.entries(usageMap)
+                };
         }, [modelChanges]);
 
         return (
@@ -192,7 +202,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                         </div>
                                                 </div>
                                         </div>
-                                        {!isTaskExpanded && isCostAvailable && (
+                                        {!isTaskExpanded && isCostAvailable && currentModelStats && (
                                                 <div
                                                         style={{
                                                                 marginLeft: 10,
@@ -205,7 +215,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                 display: "inline-block",
                                                                 flexShrink: 0,
                                                         }}>
-                                                        ${totalCost?.toFixed(4)}
+                                                        ${currentModelStats.cost.toFixed(4)}
                                                 </div>
                                         )}
                                         <VSCodeButton appearance="icon" onClick={onClose} style={{ marginLeft: 6, flexShrink: 0 }}>
@@ -290,20 +300,20 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                         alignItems: "center",
                                                                 }}>
                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
-                                                                        <span style={{ fontWeight: "bold" }}>Tokens:</span>
+                                                                        <span style={{ fontWeight: "bold" }}>Current Model Tokens:</span>
                                                                         <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                                                                 <i
                                                                                         className="codicon codicon-arrow-up"
                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                 />
-                                                                                {formatLargeNumber(tokensIn || 0)}
+                                                                                {formatLargeNumber(currentModelStats?.tokensIn || 0)}
                                                                         </span>
                                                                         <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                                                                 <i
                                                                                         className="codicon codicon-arrow-down"
                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                 />
-                                                                                {formatLargeNumber(tokensOut || 0)}
+                                                                                {formatLargeNumber(currentModelStats?.tokensOut || 0)}
                                                                         </span>
                                                                 </div>
                                                                 {!isCostAvailable && <ExportButton />}
@@ -337,8 +347,8 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                         alignItems: "center",
                                                                                 }}>
                                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                                                        <span style={{ fontWeight: "bold" }}>API Cost:</span>
-                                                                                        <span>${totalCost?.toFixed(4)}</span>
+                                                                                        <span style={{ fontWeight: "bold" }}>Current Model Cost:</span>
+                                                                                        <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
                                                                                 </div>
                                                                                 <div style={{ display: "flex", gap: "8px" }}>
                                                                                         {modelChanges && modelChanges.length > 1 && (
