@@ -98,24 +98,30 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                 }
         }, [task.text, windowWidth])
 
-        const { selectedProvider, selectedModelId, selectedModelInfo, isCostAvailable } = useMemo(() => {
-                const { selectedProvider, selectedModelId, selectedModelInfo } = normalizeApiConfiguration(apiConfiguration)
+        const { selectedProvider, selectedModelId, isCostAvailable } = useMemo(() => {
+                const { selectedProvider, selectedModelId } = normalizeApiConfiguration(apiConfiguration)
                 const isCostAvailable = (
                         apiConfiguration?.apiProvider !== "openai" &&
                         apiConfiguration?.apiProvider !== "ollama" &&
                         apiConfiguration?.apiProvider !== "lmstudio" &&
                         apiConfiguration?.apiProvider !== "gemini"
                 )
-                return { selectedProvider, selectedModelId, selectedModelInfo, isCostAvailable }
+                return { selectedProvider, selectedModelId, isCostAvailable }
         }, [apiConfiguration])
 
         const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
 
-        const { currentModelStats, perModelUsage } = useMemo(() => {
+        type ModelStats = {
+                tokensIn: number;
+                tokensOut: number;
+                cost: number;
+        };
+
+        const { currentModelStats } = useMemo(() => {
                 if (!modelChanges || modelChanges.length === 0) {
-                        return { currentModelStats: null, perModelUsage: null };
+                        return { currentModelStats: null as ModelStats | null };
                 }
-                const usageMap: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
+                const usageMap: Record<string, ModelStats> = {};
                 let currentModelStats = null;
 
                 modelChanges.forEach(change => {
@@ -135,10 +141,9 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                         }
                 });
                 return { 
-                        currentModelStats,
-                        perModelUsage: Object.entries(usageMap)
+                        currentModelStats
                 };
-        }, [modelChanges]);
+        }, [modelChanges, selectedProvider, selectedModelId]);
 
         return (
                 <div style={{ padding: "10px 13px 10px 13px" }}>
