@@ -30,13 +30,13 @@ export class ModelTracker {
     }
 
     /**
-     * Updates usage statistics for the currently active model
+     * Updates usage statistics for the currently active model.
+     * Note: Usage stats are always attributed to the current model,
+     * regardless of which model was active when the request was initiated.
      */
     updateUsageStats(timestamp: number, stats: Partial<ModelUsageStats>) {
-        const activeChange = this.changes.find(change => 
-            change.startTs <= timestamp && 
-            (!change.endTs || change.endTs > timestamp)
-        )
+        // Always attribute usage stats to the current active model
+        const activeChange = this.changes[this.changes.length - 1]
         
         if (activeChange) {
             if (!activeChange.usage) {
