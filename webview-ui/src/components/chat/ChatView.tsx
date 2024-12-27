@@ -6,6 +6,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import styled from "styled-components"
 import {
 	ClineAsk,
+	ClineApiReqInfo,
 	ClineMessage,
 	ClineSayBrowserAction,
 	ClineSayTool,
@@ -728,7 +729,22 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 						cacheWrites={apiMetrics.totalCacheWrites}
 						cacheReads={apiMetrics.totalCacheReads}
 						totalCost={apiMetrics.totalCost}
-						modelChanges={taskHistory.find(item => item.id === task.ts.toString())?.modelChanges}
+						modelChanges={(() => {
+							// First try to find in task history
+							const foundItem = taskHistory.find(item => item.id === task.ts.toString() || item.ts === task.ts);
+							if (foundItem?.modelChanges) {
+								return foundItem.modelChanges;
+							}
+							
+							// If not in history, try to get from latest API request
+							const lastApiReqStarted = findLast(modifiedMessages, (message) => message.say === "api_req_started");
+							if (lastApiReqStarted?.text) {
+								const info = JSON.parse(lastApiReqStarted.text) as ClineApiReqInfo;
+								return info.modelChanges;
+							}
+							
+							return undefined;
+						})()}
 						onClose={handleTaskCloseButtonClick}
 					/>
 			) : (

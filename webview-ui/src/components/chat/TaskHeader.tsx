@@ -110,6 +110,25 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 
 	const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
 
+	const perModelUsage = useMemo(() => {
+		if (!modelChanges || modelChanges.length === 0) {
+			return null;
+		}
+		const usageMap: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
+		modelChanges.forEach(change => {
+			if (change.usage) {
+				const key = `${change.modelProvider}/${change.modelId}`;
+				if (!usageMap[key]) {
+					usageMap[key] = { tokensIn: 0, tokensOut: 0, cost: 0 };
+				}
+				usageMap[key].tokensIn += change.usage.tokensIn;
+				usageMap[key].tokensOut += change.usage.tokensOut;
+				usageMap[key].cost += change.usage.cost;
+			}
+		});
+		return Object.entries(usageMap);
+	}, [modelChanges]);
+
 	return (
 		<div style={{ padding: "10px 13px 10px 13px" }}>
 			<div
@@ -321,7 +340,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 											<span>${totalCost?.toFixed(4)}</span>
 										</div>
 										<ExportButton />
-									</div>
+									</div>							
 									{modelChanges?.map((change: ModelChange) => change.usage && (
 										<div 
 											key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}

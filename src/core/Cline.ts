@@ -2295,7 +2295,10 @@ export class Cline {
 		const model = this.api.getModel()
 		if (model.id && this.apiConfiguration.apiProvider) {
 			const currentModel = this.conversationState.getCurrentModel()
-			if (!currentModel || currentModel.modelId !== model.id || currentModel.modelProvider !== this.apiConfiguration.apiProvider) {
+			if (!currentModel || 
+				currentModel.modelId !== model.id || 
+				currentModel.modelProvider !== this.apiConfiguration.apiProvider ||
+				(currentModel.modelProvider === "openrouter" && currentModel.modelId !== model.id)) {
 				this.conversationState.recordModelChange(model.id, this.apiConfiguration.apiProvider, Date.now())
 			}
 		}
@@ -2324,6 +2327,8 @@ export class Cline {
 		const lastApiReqIndex = findLastIndex(this.clineMessages, (m) => m.say === "api_req_started")
 		this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 			request: userContent.map((block) => formatContentBlockToMarkdown(block)).join("\n\n"),
+			modelId: model.id,
+			modelProvider: this.apiConfiguration.apiProvider,
 			modelChanges: this.conversationState.getModelChanges()
 		} satisfies ClineApiReqInfo)
 		await this.saveClineMessages()
@@ -2368,6 +2373,7 @@ export class Cline {
 					streamingFailedMessage,
 					modelId: model.id,
 					modelProvider: this.apiConfiguration.apiProvider,
+					modelChanges: this.conversationState.getModelChanges()
 				} satisfies ClineApiReqInfo)
 			}
 
