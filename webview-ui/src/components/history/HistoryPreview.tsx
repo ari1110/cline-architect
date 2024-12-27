@@ -4,6 +4,7 @@ import { vscode } from "../../utils/vscode"
 import { memo } from "react"
 import { StaticModelIdentifier } from "../chat/StaticModelIdentifier"
 import { formatLargeNumber } from "../../utils/format"
+import { ModelChange } from "../../../../src/shared/model-tracking"
 
 type HistoryPreviewProps = {
 	showHistoryView: () => void
@@ -115,27 +116,41 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 											modelId={item.modelId}
 										/>
 									</div>
-									<div>
-										<span>
-											Tokens: ↑{formatLargeNumber(item.tokensIn || 0)} ↓
-											{formatLargeNumber(item.tokensOut || 0)}
-										</span>
-										{!!item.cacheWrites && (
-											<>
-												{" • "}
+									{!!item.totalCost && (
+										<>
+											<div style={{ display: "flex", gap: 8, opacity: 0.8 }}>
 												<span>
-													Cache: +{formatLargeNumber(item.cacheWrites || 0)} →{" "}
-													{formatLargeNumber(item.cacheReads || 0)}
+													Tokens: ↑{formatLargeNumber(item.tokensIn || 0)} ↓
+													{formatLargeNumber(item.tokensOut || 0)}
 												</span>
-											</>
-										)}
-										{!!item.totalCost && (
-											<>
-												{" • "}
-												<span>API Cost: ${item.totalCost?.toFixed(4)}</span>
-											</>
-										)}
-									</div>
+												{!!item.cacheWrites && (
+													<span>
+														Cache: +{formatLargeNumber(item.cacheWrites || 0)} →{" "}
+														{formatLargeNumber(item.cacheReads || 0)}
+													</span>
+												)}
+												<span>Total: ${item.totalCost?.toFixed(4)}</span>
+											</div>
+											{item.modelChanges?.map((change: ModelChange) => change.usage && (
+												<div 
+													key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}
+													style={{ 
+														marginTop: 4,
+														padding: "2px 6px",
+														backgroundColor: "var(--vscode-textBlockQuote-background)",
+														borderRadius: 3,
+														display: "flex",
+														justifyContent: "space-between",
+														alignItems: "center"
+													}}>
+													<span style={{ fontWeight: 500 }}>
+														{change.modelProvider}/{change.modelId}
+													</span>
+													<span>${change.usage.cost.toFixed(4)}</span>
+												</div>
+											))}
+										</>
+									)}
 								</div>
 							</div>
 						</div>

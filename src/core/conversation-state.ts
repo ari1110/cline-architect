@@ -20,6 +20,13 @@ export class ConversationState {
     }
 
     /**
+     * Updates usage statistics for the current model
+     */
+    updateModelStats(timestamp: number, stats: Partial<import('../shared/model-tracking').ModelUsageStats>) {
+        this.modelTracker.updateUsageStats(timestamp, stats)
+    }
+
+    /**
      * Gets the model info for a specific message timestamp
      */
     getModelForMessage(timestamp: number) {
@@ -38,6 +45,13 @@ export class ConversationState {
      */
     getModelChanges(): ModelChange[] {
         return this.modelTracker.getAllChanges()
+    }
+
+    /**
+     * Gets aggregated usage stats for all models
+     */
+    getModelStats() {
+        return this.modelTracker.getModelStats()
     }
 
     /**

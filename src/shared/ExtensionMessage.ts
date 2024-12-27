@@ -149,6 +149,7 @@ export interface ClineApiReqInfo {
 	streamingFailedMessage?: string
 	modelId?: string
 	modelProvider?: string
+	modelChanges: import('./model-tracking').ModelChange[] // Required since we need complete model usage state
 }
 
 export type ClineApiReqCancelReason = "streaming_failed" | "user_cancelled"

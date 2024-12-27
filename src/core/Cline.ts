@@ -2308,8 +2308,9 @@ export class Cline {
 				request:
 					userContent.map((block) => formatContentBlockToMarkdown(block)).join("\n\n") + "\n\nLoading...",
 				modelId: model.id,
-				modelProvider: this.apiConfiguration.apiProvider
-			}),
+				modelProvider: this.apiConfiguration.apiProvider,
+				modelChanges: this.conversationState.getModelChanges()
+			} satisfies ClineApiReqInfo),
 		)
 
 		const [parsedUserContent, environmentDetails] = await this.loadContext(userContent, includeFileDetails)
@@ -2323,6 +2324,7 @@ export class Cline {
 		const lastApiReqIndex = findLastIndex(this.clineMessages, (m) => m.say === "api_req_started")
 		this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 			request: userContent.map((block) => formatContentBlockToMarkdown(block)).join("\n\n"),
+			modelChanges: this.conversationState.getModelChanges()
 		} satisfies ClineApiReqInfo)
 		await this.saveClineMessages()
 		await this.providerRef.deref()?.postStateToWebview()
@@ -2338,19 +2340,30 @@ export class Cline {
 			// fortunately api_req_finished was always parsed out for the gui anyways, so it remains solely for legacy purposes to keep track of prices in tasks from history
 			// (it's worth removing a few months from now)
 			const updateApiReqMsg = (cancelReason?: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
+				const cost = totalCost ?? calculateApiCost(
+					model.info,
+					inputTokens,
+					outputTokens,
+					cacheWriteTokens,
+					cacheReadTokens,
+				)
+
+				// Update model usage stats
+				this.conversationState.updateModelStats(Date.now(), {
+					tokensIn: inputTokens,
+					tokensOut: outputTokens,
+					cacheWrites: cacheWriteTokens,
+					cacheReads: cacheReadTokens,
+					cost
+				})
+
 				this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 					...JSON.parse(this.clineMessages[lastApiReqIndex].text || "{}"),
 					tokensIn: inputTokens,
 					tokensOut: outputTokens,
 					cacheWrites: cacheWriteTokens,
 					cacheReads: cacheReadTokens,
-					cost: totalCost ?? calculateApiCost(
-						model.info,
-						inputTokens,
-						outputTokens,
-						cacheWriteTokens,
-						cacheReadTokens,
-					),
+					cost,
 					cancelReason,
 					streamingFailedMessage,
 					modelId: model.id,

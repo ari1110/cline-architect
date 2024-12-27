@@ -6,6 +6,7 @@ import { memo, useMemo, useState, useEffect } from "react"
 import { StaticModelIdentifier } from "../chat/StaticModelIdentifier"
 import Fuse, { FuseResult } from "fuse.js"
 import { formatLargeNumber } from "../../utils/format"
+import { ModelChange } from "../../../../src/shared/model-tracking"
 
 type HistoryViewProps = {
 	onDone: () => void
@@ -388,27 +389,57 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 											</div>
 										)}
 										{!!item.totalCost && (
-											<div
-												style={{
-													display: "flex",
-													justifyContent: "space-between",
-													alignItems: "center",
-													marginTop: -2,
-												}}>
-												<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-													<span
-														style={{
-															fontWeight: 500,
-															color: "var(--vscode-descriptionForeground)",
-														}}>
-														API Cost:
-													</span>
-													<span style={{ color: "var(--vscode-descriptionForeground)" }}>
-														${item.totalCost?.toFixed(4)}
-													</span>
+											<>
+												<div
+													style={{
+														display: "flex",
+														justifyContent: "space-between",
+														alignItems: "center",
+														marginTop: -2,
+													}}>
+													<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+														<span
+															style={{
+																fontWeight: 500,
+																color: "var(--vscode-descriptionForeground)",
+															}}>
+															API Cost:
+														</span>
+														<span style={{ color: "var(--vscode-descriptionForeground)" }}>
+															${item.totalCost?.toFixed(4)}
+														</span>
+													</div>
+													<ExportButton itemId={item.id} />
 												</div>
-												<ExportButton itemId={item.id} />
-											</div>
+												{item.modelChanges?.map((change: ModelChange) => change.usage && (
+													<div 
+														key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}
+														style={{ 
+															marginTop: 8,
+															padding: "4px 8px",
+															backgroundColor: "var(--vscode-textBlockQuote-background)",
+															borderRadius: 3,
+															fontSize: "0.85em"
+														}}>
+														<div style={{ 
+															display: "flex", 
+															justifyContent: "space-between",
+															marginBottom: 2
+														}}>
+															<span style={{ fontWeight: 500 }}>
+																{change.modelProvider}/{change.modelId}
+															</span>
+															<span>${change.usage.cost.toFixed(4)}</span>
+														</div>
+														<div style={{ display: "flex", gap: 8, opacity: 0.8 }}>
+															<span>↑{formatLargeNumber(change.usage.tokensIn)} ↓{formatLargeNumber(change.usage.tokensOut)}</span>
+															{!!change.usage.cacheWrites && (
+																<span>Cache: +{formatLargeNumber(change.usage.cacheWrites)} → {formatLargeNumber(change.usage.cacheReads || 0)}</span>
+															)}
+														</div>
+													</div>
+												))}
+											</>
 										)}
 									</div>
 								</div>

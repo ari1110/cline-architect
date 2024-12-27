@@ -1,15 +1,24 @@
 /**
  * Represents a model change during a conversation
  */
+export interface ModelUsageStats {
+    tokensIn: number
+    tokensOut: number
+    cacheWrites?: number
+    cacheReads?: number
+    cost: number
+}
+
 export interface ModelChange {
     modelId: string
     modelProvider: string
     startTs: number // Timestamp when this model became active
     endTs?: number  // Timestamp when this model was replaced (undefined if still active)
+    usage?: ModelUsageStats // Usage statistics for this model during its active period
 }
 
 /**
- * Manages model changes during a conversation
+ * Manages model changes and usage statistics during a conversation
  */
 export class ModelTracker {
     private changes: ModelChange[] = []
@@ -18,6 +27,67 @@ export class ModelTracker {
         if (initialChanges) {
             this.changes = [...initialChanges]
         }
+    }
+
+    /**
+     * Updates usage statistics for the currently active model
+     */
+    updateUsageStats(timestamp: number, stats: Partial<ModelUsageStats>) {
+        const activeChange = this.changes.find(change => 
+            change.startTs <= timestamp && 
+            (!change.endTs || change.endTs > timestamp)
+        )
+        
+        if (activeChange) {
+            if (!activeChange.usage) {
+                activeChange.usage = {
+                    tokensIn: 0,
+                    tokensOut: 0,
+                    cost: 0
+                }
+            }
+            
+            activeChange.usage.tokensIn += stats.tokensIn || 0
+            activeChange.usage.tokensOut += stats.tokensOut || 0
+            if (stats.cacheWrites) {
+                activeChange.usage.cacheWrites = (activeChange.usage.cacheWrites || 0) + stats.cacheWrites
+            }
+            if (stats.cacheReads) {
+                activeChange.usage.cacheReads = (activeChange.usage.cacheReads || 0) + stats.cacheReads
+            }
+            activeChange.usage.cost += stats.cost || 0
+        }
+    }
+
+    /**
+     * Gets aggregated usage stats for all models
+     */
+    getModelStats(): Record<string, ModelUsageStats> {
+        const stats: Record<string, ModelUsageStats> = {}
+        
+        this.changes.forEach(change => {
+            if (change.usage) {
+                const key = `${change.modelProvider}/${change.modelId}`
+                if (!stats[key]) {
+                    stats[key] = {
+                        tokensIn: 0,
+                        tokensOut: 0,
+                        cost: 0
+                    }
+                }
+                stats[key].tokensIn += change.usage.tokensIn
+                stats[key].tokensOut += change.usage.tokensOut
+                if (change.usage.cacheWrites) {
+                    stats[key].cacheWrites = (stats[key].cacheWrites || 0) + change.usage.cacheWrites
+                }
+                if (change.usage.cacheReads) {
+                    stats[key].cacheReads = (stats[key].cacheReads || 0) + change.usage.cacheReads
+                }
+                stats[key].cost += change.usage.cost
+            }
+        })
+        
+        return stats
     }
     
     /**
