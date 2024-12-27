@@ -117,12 +117,16 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                 cost: number;
         };
 
-        const { currentModelStats } = useMemo(() => {
+        const { currentModelStats, totalStats } = useMemo(() => {
                 if (!modelChanges || modelChanges.length === 0) {
-                        return { currentModelStats: null as ModelStats | null };
+                        return { 
+                            currentModelStats: null as ModelStats | null,
+                            totalStats: null as ModelStats | null
+                        };
                 }
                 const usageMap: Record<string, ModelStats> = {};
                 let currentModelStats = null;
+                const totalStats: ModelStats = { tokensIn: 0, tokensOut: 0, cost: 0 };
 
                 modelChanges.forEach(change => {
                         if (change.usage) {
@@ -138,10 +142,16 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                 if (change.modelProvider === selectedProvider && change.modelId === selectedModelId) {
                                         currentModelStats = usageMap[key];
                                 }
+
+                                // Add to total stats
+                                totalStats.tokensIn += change.usage.tokensIn;
+                                totalStats.tokensOut += change.usage.tokensOut;
+                                totalStats.cost += change.usage.cost;
                         }
                 });
                 return { 
-                        currentModelStats
+                        currentModelStats,
+                        totalStats
                 };
         }, [modelChanges, selectedProvider, selectedModelId]);
 
@@ -207,7 +217,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                         </div>
                                                 </div>
                                         </div>
-                                        {!isTaskExpanded && isCostAvailable && currentModelStats && (
+                                        {!isTaskExpanded && isCostAvailable && totalStats && (
                                                 <div
                                                         style={{
                                                                 marginLeft: 10,
@@ -220,7 +230,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                 display: "inline-block",
                                                                 flexShrink: 0,
                                                         }}>
-                                                        ${currentModelStats.cost.toFixed(4)}
+                                                        ${totalStats.cost.toFixed(4)}
                                                 </div>
                                         )}
                                         <VSCodeButton appearance="icon" onClick={onClose} style={{ marginLeft: 6, flexShrink: 0 }}>
@@ -304,22 +314,41 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                         justifyContent: "space-between",
                                                                         alignItems: "center",
                                                                 }}>
-                                                                <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
-                                                                        <span style={{ fontWeight: "bold" }}>Current Model Tokens:</span>
-                                                                        <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                                                                                <i
-                                                                                        className="codicon codicon-arrow-up"
-                                                                                        style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
-                                                                                />
-                                                                                {formatLargeNumber(currentModelStats?.tokensIn || 0)}
-                                                                        </span>
-                                                                        <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                                                                                <i
-                                                                                        className="codicon codicon-arrow-down"
-                                                                                        style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
-                                                                                />
-                                                                                {formatLargeNumber(currentModelStats?.tokensOut || 0)}
-                                                                        </span>
+                                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
+                                                                                <span style={{ fontWeight: "bold" }}>Total Tokens:</span>
+                                                                                <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                                                                        <i
+                                                                                                className="codicon codicon-arrow-up"
+                                                                                                style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
+                                                                                        />
+                                                                                        {formatLargeNumber(totalStats?.tokensIn || 0)}
+                                                                                </span>
+                                                                                <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                                                                        <i
+                                                                                                className="codicon codicon-arrow-down"
+                                                                                                style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
+                                                                                        />
+                                                                                        {formatLargeNumber(totalStats?.tokensOut || 0)}
+                                                                                </span>
+                                                                        </div>
+                                                                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap", opacity: 0.8 }}>
+                                                                                <span style={{ fontWeight: "bold" }}>Current Model:</span>
+                                                                                <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                                                                        <i
+                                                                                                className="codicon codicon-arrow-up"
+                                                                                                style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
+                                                                                        />
+                                                                                        {formatLargeNumber(currentModelStats?.tokensIn || 0)}
+                                                                                </span>
+                                                                                <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                                                                        <i
+                                                                                                className="codicon codicon-arrow-down"
+                                                                                                style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
+                                                                                        />
+                                                                                        {formatLargeNumber(currentModelStats?.tokensOut || 0)}
+                                                                                </span>
+                                                                        </div>
                                                                 </div>
                                                                 {!isCostAvailable && <ExportButton />}
                                                         </div>
@@ -351,9 +380,15 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                         justifyContent: "space-between",
                                                                                         alignItems: "center",
                                                                                 }}>
-                                                                                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                                                        <span style={{ fontWeight: "bold" }}>Current Model Cost:</span>
-                                                                                        <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                                                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                                                                                <span style={{ fontWeight: "bold" }}>Total Cost:</span>
+                                                                                                <span>${totalStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                                        </div>
+                                                                                        <div style={{ display: "flex", alignItems: "center", gap: "4px", opacity: 0.8 }}>
+                                                                                                <span style={{ fontWeight: "bold" }}>Current Model:</span>
+                                                                                                <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                                        </div>
                                                                                 </div>
                                                                                 <div style={{ display: "flex", gap: "8px" }}>
                                                                                         {modelChanges && modelChanges.length > 1 && (
