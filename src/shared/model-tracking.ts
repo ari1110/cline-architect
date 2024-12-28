@@ -62,9 +62,38 @@ export class ModelTracker {
     getModelStats(): Record<string, ModelUsageStats> {
         const stats: Record<string, ModelUsageStats> = {}
         
-        this.changes.forEach(change => {
+        // Group changes by model and accumulate stats for each period the model was active
+        let currentPeriod: { [key: string]: ModelUsageStats } = {}
+        
+        this.changes.forEach((change, index) => {
+            const key = `${change.modelProvider}/${change.modelId}`
+            
+            // If this is a new model period, initialize its stats
+            if (!currentPeriod[key]) {
+                currentPeriod[key] = {
+                    tokensIn: 0,
+                    tokensOut: 0,
+                    cost: 0
+                }
+            }
+            
+            // Add any usage stats from this period
             if (change.usage) {
-                const key = `${change.modelProvider}/${change.modelId}`
+                currentPeriod[key].tokensIn += change.usage.tokensIn
+                currentPeriod[key].tokensOut += change.usage.tokensOut
+                currentPeriod[key].cost += change.usage.cost
+                if (change.usage.cacheWrites) {
+                    currentPeriod[key].cacheWrites = (currentPeriod[key].cacheWrites || 0) + change.usage.cacheWrites
+                }
+                if (change.usage.cacheReads) {
+                    currentPeriod[key].cacheReads = (currentPeriod[key].cacheReads || 0) + change.usage.cacheReads
+                }
+            }
+            
+            // If this model period is ending (next change is different model or this is the last change)
+            const nextChange = this.changes[index + 1]
+            if (!nextChange || nextChange.modelId !== change.modelId || nextChange.modelProvider !== change.modelProvider) {
+                // Add this period's stats to the total for this model
                 if (!stats[key]) {
                     stats[key] = {
                         tokensIn: 0,
@@ -72,15 +101,19 @@ export class ModelTracker {
                         cost: 0
                     }
                 }
-                stats[key].tokensIn += change.usage.tokensIn
-                stats[key].tokensOut += change.usage.tokensOut
-                if (change.usage.cacheWrites) {
-                    stats[key].cacheWrites = (stats[key].cacheWrites || 0) + change.usage.cacheWrites
+                if (currentPeriod[key]) {
+                    stats[key].tokensIn += currentPeriod[key].tokensIn
+                    stats[key].tokensOut += currentPeriod[key].tokensOut
+                    stats[key].cost += currentPeriod[key].cost
+                    if (currentPeriod[key].cacheWrites) {
+                        stats[key].cacheWrites = (stats[key].cacheWrites || 0) + currentPeriod[key].cacheWrites
+                    }
+                    if (currentPeriod[key].cacheReads) {
+                        stats[key].cacheReads = (stats[key].cacheReads || 0) + currentPeriod[key].cacheReads
+                    }
                 }
-                if (change.usage.cacheReads) {
-                    stats[key].cacheReads = (stats[key].cacheReads || 0) + change.usage.cacheReads
-                }
-                stats[key].cost += change.usage.cost
+                // Reset the current period for this model
+                delete currentPeriod[key]
             }
         })
         
