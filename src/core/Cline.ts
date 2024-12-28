@@ -2435,10 +2435,11 @@ export class Cline {
                                 for await (const chunk of stream) {
                                         switch (chunk.type) {
                                                 case "usage":
-                                                        inputTokens += chunk.inputTokens
-                                                        outputTokens += chunk.outputTokens
-                                                        cacheWriteTokens += chunk.cacheWriteTokens ?? 0
-                                                        cacheReadTokens += chunk.cacheReadTokens ?? 0
+                                                        // Store the token counts and cost directly from the API response
+                                                        inputTokens = chunk.inputTokens
+                                                        outputTokens = chunk.outputTokens
+                                                        cacheWriteTokens = chunk.cacheWriteTokens ?? 0
+                                                        cacheReadTokens = chunk.cacheReadTokens ?? 0
                                                         totalCost = chunk.totalCost
                                                         break
                                                 case "text":
