@@ -47,15 +47,12 @@ export class ModelTracker {
                 }
             }
             
-            activeChange.usage.tokensIn += stats.tokensIn || 0
-            activeChange.usage.tokensOut += stats.tokensOut || 0
-            if (stats.cacheWrites) {
-                activeChange.usage.cacheWrites = (activeChange.usage.cacheWrites || 0) + stats.cacheWrites
-            }
-            if (stats.cacheReads) {
-                activeChange.usage.cacheReads = (activeChange.usage.cacheReads || 0) + stats.cacheReads
-            }
-            activeChange.usage.cost += stats.cost || 0
+            // Set the token counts and cost directly from the stats
+            if (stats.tokensIn !== undefined) activeChange.usage.tokensIn = stats.tokensIn
+            if (stats.tokensOut !== undefined) activeChange.usage.tokensOut = stats.tokensOut
+            if (stats.cacheWrites !== undefined) activeChange.usage.cacheWrites = stats.cacheWrites
+            if (stats.cacheReads !== undefined) activeChange.usage.cacheReads = stats.cacheReads
+            if (stats.cost !== undefined) activeChange.usage.cost = stats.cost
         }
     }
 
