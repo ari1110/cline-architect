@@ -48,11 +48,11 @@ export class ModelTracker {
             }
             
             // Set the token counts and cost directly from the stats
-            if (stats.tokensIn !== undefined) activeChange.usage.tokensIn = stats.tokensIn
-            if (stats.tokensOut !== undefined) activeChange.usage.tokensOut = stats.tokensOut
-            if (stats.cacheWrites !== undefined) activeChange.usage.cacheWrites = stats.cacheWrites
-            if (stats.cacheReads !== undefined) activeChange.usage.cacheReads = stats.cacheReads
-            if (stats.cost !== undefined) activeChange.usage.cost = stats.cost
+            if (stats.tokensIn !== undefined) {activeChange.usage.tokensIn = stats.tokensIn}
+            if (stats.tokensOut !== undefined) {activeChange.usage.tokensOut = stats.tokensOut}
+            if (stats.cacheWrites !== undefined) {activeChange.usage.cacheWrites = stats.cacheWrites}
+            if (stats.cacheReads !== undefined) {activeChange.usage.cacheReads = stats.cacheReads}
+            if (stats.cost !== undefined) {activeChange.usage.cost = stats.cost}
         }
     }
 
