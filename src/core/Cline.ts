@@ -65,6 +65,13 @@ export class Cline {
         readonly taskId: string
         api: ApiHandler
         private apiConfiguration: ApiConfiguration
+
+        /**
+         * Updates the API configuration and ensures model changes are properly tracked
+         */
+        updateApiConfiguration(newConfig: ApiConfiguration) {
+            this.apiConfiguration = newConfig
+        }
         private conversationState: ConversationState
         private terminalManager: TerminalManager
         private urlContentFetcher: UrlContentFetcher
