@@ -117,42 +117,39 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                 cost: number;
         };
 
-        const { currentModelStats, totalStats } = useMemo(() => {
-                if (!modelChanges || modelChanges.length === 0) {
-                        return { 
-                            currentModelStats: null as ModelStats | null,
-                            totalStats: null as ModelStats | null
-                        };
-                }
-                const usageMap: Record<string, ModelStats> = {};
-                let currentModelStats = null;
-                const totalStats: ModelStats = { tokensIn: 0, tokensOut: 0, cost: 0 };
-
-                modelChanges.forEach(change => {
-                        if (change.usage) {
-                                const key = `${change.modelProvider}/${change.modelId}`;
-                                if (!usageMap[key]) {
-                                        usageMap[key] = { tokensIn: 0, tokensOut: 0, cost: 0 };
-                                }
-                                usageMap[key].tokensIn += change.usage.tokensIn;
-                                usageMap[key].tokensOut += change.usage.tokensOut;
-                                usageMap[key].cost += change.usage.cost;
-
-                                // Track current model's stats
-                                if (change.modelProvider === selectedProvider && change.modelId === selectedModelId) {
-                                        currentModelStats = usageMap[key];
-                                }
-
-                                // Add to total stats
-                                totalStats.tokensIn += change.usage.tokensIn;
-                                totalStats.tokensOut += change.usage.tokensOut;
-                                totalStats.cost += change.usage.cost;
+                const { currentModelStats } = useMemo(() => {
+                        if (!modelChanges || modelChanges.length === 0) {
+                                return { currentModelStats: null as ModelStats | null };
                         }
-                });
-                return { 
-                        currentModelStats,
-                        totalStats
-                };
+
+                        // Get only the changes for the current model
+                        const currentModelChanges = modelChanges.filter(change => 
+                                change.usage && 
+                                change.modelProvider === selectedProvider && 
+                                change.modelId === selectedModelId
+                        );
+
+                        if (currentModelChanges.length === 0) {
+                                return { currentModelStats: null as ModelStats | null };
+                        }
+
+                        // Calculate cumulative stats for the current model
+                        const currentModelStats: ModelStats = {
+                                tokensIn: 0,
+                                tokensOut: 0,
+                                cost: 0
+                        };
+
+                        // Add up all usage for the current model
+                        currentModelChanges.forEach(change => {
+                                if (change.usage) {
+                                        currentModelStats.tokensIn += change.usage.tokensIn;
+                                        currentModelStats.tokensOut += change.usage.tokensOut;
+                                        currentModelStats.cost += change.usage.cost;
+                                }
+                        });
+
+                        return { currentModelStats };
         }, [modelChanges, selectedProvider, selectedModelId]);
 
         return (
@@ -346,19 +343,19 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                                         className="codicon codicon-arrow-up"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(currentModelStats?.tokensIn || tokensIn)}
+                                                                                                {formatLargeNumber(currentModelStats?.tokensIn || 0)}
                                                                                         </span>
                                                                                         <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                                                                                 <i
                                                                                                         className="codicon codicon-arrow-down"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(currentModelStats?.tokensOut || tokensOut)}
+                                                                                                {formatLargeNumber(currentModelStats?.tokensOut || 0)}
                                                                                         </span>
                                                                                 </div>
                                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                                                                         <span style={{ fontWeight: "bold" }}>Cost:</span>
-                                                                                        <span>${currentModelStats?.cost.toFixed(4) || totalCost.toFixed(4)}</span>
+                                                                                        <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
                                                                                 </div>
                                                                         </div>
                                                                 </div>
