@@ -79,13 +79,13 @@ export class ModelTracker {
             
             // Add any usage stats from this period
             if (change.usage) {
-                currentPeriod[key].tokensIn += change.usage.tokensIn
-                currentPeriod[key].tokensOut += change.usage.tokensOut
-                currentPeriod[key].cost += change.usage.cost
-                if (change.usage.cacheWrites) {
+                currentPeriod[key].tokensIn += change.usage.tokensIn || 0
+                currentPeriod[key].tokensOut += change.usage.tokensOut || 0
+                currentPeriod[key].cost += change.usage.cost || 0
+                if (change.usage.cacheWrites !== undefined) {
                     currentPeriod[key].cacheWrites = (currentPeriod[key].cacheWrites || 0) + change.usage.cacheWrites
                 }
-                if (change.usage.cacheReads) {
+                if (change.usage.cacheReads !== undefined) {
                     currentPeriod[key].cacheReads = (currentPeriod[key].cacheReads || 0) + change.usage.cacheReads
                 }
             }
@@ -105,10 +105,10 @@ export class ModelTracker {
                     stats[key].tokensIn += currentPeriod[key].tokensIn
                     stats[key].tokensOut += currentPeriod[key].tokensOut
                     stats[key].cost += currentPeriod[key].cost
-                    if (currentPeriod[key].cacheWrites) {
+                    if (currentPeriod[key].cacheWrites !== undefined) {
                         stats[key].cacheWrites = (stats[key].cacheWrites || 0) + currentPeriod[key].cacheWrites
                     }
-                    if (currentPeriod[key].cacheReads) {
+                    if (currentPeriod[key].cacheReads !== undefined) {
                         stats[key].cacheReads = (stats[key].cacheReads || 0) + currentPeriod[key].cacheReads
                     }
                 }
