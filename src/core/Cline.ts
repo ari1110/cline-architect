@@ -2353,12 +2353,13 @@ export class Cline {
                                         cacheReadTokens,
                                 )
 
-                                // Update token counts only (cost is handled when we receive the chunk)
+                                // Update model stats with the latest token counts and cost
                                 this.conversationState.updateModelStats(Date.now(), {
                                         tokensIn: inputTokens,
                                         tokensOut: outputTokens,
                                         cacheWrites: cacheWriteTokens,
-                                        cacheReads: cacheReadTokens
+                                        cacheReads: cacheReadTokens,
+                                        cost
                                 })
 
                                 this.clineMessages[lastApiReqIndex].text = JSON.stringify({
@@ -2438,18 +2439,7 @@ export class Cline {
                                                         outputTokens += chunk.outputTokens
                                                         cacheWriteTokens += chunk.cacheWriteTokens ?? 0
                                                         cacheReadTokens += chunk.cacheReadTokens ?? 0
-                                                        // Use the cost directly from the API response
-                                                if (chunk.totalCost !== undefined) {
-                                                    totalCost = chunk.totalCost
-                                                    // Update model stats immediately with just this response's cost
-                                                    this.conversationState.updateModelStats(Date.now(), {
-                                                        tokensIn: chunk.inputTokens,
-                                                        tokensOut: chunk.outputTokens,
-                                                        cacheWrites: chunk.cacheWriteTokens,
-                                                        cacheReads: chunk.cacheReadTokens,
-                                                        cost: chunk.totalCost
-                                                    })
-                                                }
+                                                        totalCost = chunk.totalCost
                                                         break
                                                 case "text":
                                                         assistantMessage += chunk.text
