@@ -83,10 +83,10 @@ export class ModelTracker {
                 currentPeriod[key].tokensOut += change.usage.tokensOut || 0
                 currentPeriod[key].cost += change.usage.cost || 0
                 if (change.usage.cacheWrites !== undefined) {
-                    currentPeriod[key].cacheWrites = (currentPeriod[key].cacheWrites || 0) + change.usage.cacheWrites
+                    currentPeriod[key].cacheWrites = (currentPeriod[key]?.cacheWrites ?? 0) + (change.usage.cacheWrites ?? 0)
                 }
                 if (change.usage.cacheReads !== undefined) {
-                    currentPeriod[key].cacheReads = (currentPeriod[key].cacheReads || 0) + change.usage.cacheReads
+                    currentPeriod[key].cacheReads = (currentPeriod[key]?.cacheReads ?? 0) + (change.usage.cacheReads ?? 0)
                 }
             }
             
@@ -106,10 +106,12 @@ export class ModelTracker {
                     stats[key].tokensOut += currentPeriod[key].tokensOut
                     stats[key].cost += currentPeriod[key].cost
                     if (currentPeriod[key].cacheWrites !== undefined) {
-                        stats[key].cacheWrites = (stats[key].cacheWrites || 0) + currentPeriod[key].cacheWrites
+                        stats[key] = stats[key] || {};
+                        stats[key].cacheWrites = (stats[key]?.cacheWrites ?? 0) + (currentPeriod[key]?.cacheWrites ?? 0);
                     }
                     if (currentPeriod[key].cacheReads !== undefined) {
-                        stats[key].cacheReads = (stats[key].cacheReads || 0) + currentPeriod[key].cacheReads
+                        stats[key] = stats[key] || {};
+                        stats[key].cacheReads = (stats[key]?.cacheReads ?? 0) + (currentPeriod[key]?.cacheReads ?? 0);
                     }
                 }
                 // Reset the current period for this model
