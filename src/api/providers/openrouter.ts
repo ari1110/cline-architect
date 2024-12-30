@@ -110,7 +110,8 @@ export class OpenRouterHandler implements ApiHandler {
 		})
 
 		let genId: string | undefined
-
+		const requestStartTime = Date.now() // Capture timestamp when request starts
+		
 		for await (const chunk of stream) {
 			// openrouter returns an error object instead of the openai sdk throwing an error
 			if ("error" in chunk) {
@@ -130,6 +131,7 @@ export class OpenRouterHandler implements ApiHandler {
 					text: delta.content,
 				}
 			}
+			// We'll only use the final stats from the generation endpoint
 			// if (chunk.usage) {
 			// 	yield {
 			// 		type: "usage",
@@ -159,6 +161,7 @@ export class OpenRouterHandler implements ApiHandler {
 				inputTokens: generation?.native_tokens_prompt || 0,
 				outputTokens: generation?.native_tokens_completion || 0,
 				totalCost: generation?.total_cost || 0,
+				timestamp: requestStartTime, // Pass original request timestamp
 			}
 		} catch (error) {
 			// ignore if fails

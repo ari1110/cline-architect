@@ -22,6 +22,7 @@ export interface ModelChange {
  */
 export class ModelTracker {
     private changes: ModelChange[] = []
+    private currentGenerationStats: Partial<ModelUsageStats> = {}
 
     constructor(initialChanges?: ModelChange[]) {
         if (initialChanges) {
@@ -29,95 +30,91 @@ export class ModelTracker {
         }
     }
 
+    private resetCurrentGenerationStats() {
+        this.currentGenerationStats = {}
+    }
+
     /**
-     * Updates usage statistics for the currently active model.
-     * Note: Usage stats are always attributed to the current model,
-     * regardless of which model was active when the request was initiated.
+     * Updates usage statistics for a model at a specific timestamp.
+     * Important: Stats are only updated if they belong to the model that was active at the given timestamp.
+     * This ensures delayed stats (like OpenRouter's generation details) are attributed to the correct model
+     * period, even if they arrive after switching to a different model.
      */
-    updateUsageStats(timestamp: number, stats: Partial<ModelUsageStats>) {
-        // Always attribute usage stats to the current active model
-        const activeChange = this.changes[this.changes.length - 1]
+    updateUsageStats(timestamp: number, stats: Partial<ModelUsageStats & { timestamp?: number }>) {
+        // Use the provided timestamp from stats if available (e.g. from OpenRouter's delayed stats),
+        // otherwise fall back to the passed timestamp
+        const effectiveTimestamp = stats.timestamp || timestamp
         
-        if (activeChange) {
-            if (!activeChange.usage) {
-                activeChange.usage = {
-                    tokensIn: 0,
-                    tokensOut: 0,
-                    cost: 0
-                }
+        // Find which model was active at this timestamp
+        const modelAtTimestamp = this.changes.find(change => 
+            change.startTs <= effectiveTimestamp && 
+            (!change.endTs || change.endTs > effectiveTimestamp)
+        )
+        
+        if (!modelAtTimestamp) {return}
+
+        // Initialize usage if needed
+        if (!modelAtTimestamp.usage) {
+            modelAtTimestamp.usage = {
+                tokensIn: 0,
+                tokensOut: 0,
+                cost: 0
             }
-            
-            // Set the token counts and cost directly from the stats
-            if (stats.tokensIn !== undefined) {activeChange.usage.tokensIn = stats.tokensIn}
-            if (stats.tokensOut !== undefined) {activeChange.usage.tokensOut = stats.tokensOut}
-            if (stats.cacheWrites !== undefined) {activeChange.usage.cacheWrites = stats.cacheWrites}
-            if (stats.cacheReads !== undefined) {activeChange.usage.cacheReads = stats.cacheReads}
-            if (stats.cost !== undefined) {activeChange.usage.cost = stats.cost}
+        }
+        
+        // If we get cost or totalCost, this is the final generation stats
+        if (stats.cost !== undefined || 'totalCost' in stats) {
+            // Reset current generation stats and use the final values
+            this.resetCurrentGenerationStats()
+            // Set the values directly instead of adding to them
+            modelAtTimestamp.usage.tokensIn = stats.tokensIn || 0
+            modelAtTimestamp.usage.tokensOut = stats.tokensOut || 0
+            modelAtTimestamp.usage.cost = stats.cost || (stats as any).totalCost || 0
+            if (stats.cacheWrites !== undefined) {
+                modelAtTimestamp.usage.cacheWrites = stats.cacheWrites
+            }
+            if (stats.cacheReads !== undefined) {
+                modelAtTimestamp.usage.cacheReads = stats.cacheReads
+            }
+        } else {
+            // Accumulate intermediate stats until we get final values
+            this.currentGenerationStats.tokensIn = (this.currentGenerationStats.tokensIn || 0) + (stats.tokensIn || 0)
+            this.currentGenerationStats.tokensOut = (this.currentGenerationStats.tokensOut || 0) + (stats.tokensOut || 0)
         }
     }
 
     /**
-     * Gets aggregated usage stats for all models
+     * Gets usage stats for all models by taking a snapshot of each model's most recent usage.
+     * Important: This does NOT recalculate or accumulate stats. For each model, it only uses
+     * the most recent usage numbers, completely ignoring any older usage stats for that model.
+     * This ensures that switching models does not affect the previous model's stats.
      */
     getModelStats(): Record<string, ModelUsageStats> {
         const stats: Record<string, ModelUsageStats> = {}
         
-        // Group changes by model and accumulate stats for each period the model was active
-        let currentPeriod: { [key: string]: ModelUsageStats } = {}
-        
-        this.changes.forEach((change, index) => {
+        // Process changes in reverse order (newest to oldest)
+        for (let i = this.changes.length - 1; i >= 0; i--) {
+            const change = this.changes[i]
             const key = `${change.modelProvider}/${change.modelId}`
             
-            // If this is a new model period, initialize its stats
-            if (!currentPeriod[key]) {
-                currentPeriod[key] = {
-                    tokensIn: 0,
-                    tokensOut: 0,
-                    cost: 0
+            // Skip if we already have stats for this model (ensures we only use the most recent)
+            // This prevents older usage stats from affecting the numbers we've already recorded
+            if (!stats[key] && change.usage) {
+                stats[key] = {
+                    tokensIn: change.usage.tokensIn || 0,
+                    tokensOut: change.usage.tokensOut || 0,
+                    cost: change.usage.cost || 0
                 }
-            }
-            
-            // Add any usage stats from this period
-            if (change.usage) {
-                currentPeriod[key].tokensIn += change.usage.tokensIn || 0
-                currentPeriod[key].tokensOut += change.usage.tokensOut || 0
-                currentPeriod[key].cost += change.usage.cost || 0
+                
+                // Add cache stats if present
                 if (change.usage.cacheWrites !== undefined) {
-                    currentPeriod[key].cacheWrites = (currentPeriod[key]?.cacheWrites ?? 0) + (change.usage.cacheWrites ?? 0)
+                    stats[key].cacheWrites = change.usage.cacheWrites
                 }
                 if (change.usage.cacheReads !== undefined) {
-                    currentPeriod[key].cacheReads = (currentPeriod[key]?.cacheReads ?? 0) + (change.usage.cacheReads ?? 0)
+                    stats[key].cacheReads = change.usage.cacheReads
                 }
             }
-            
-            // If this model period is ending (next change is different model or this is the last change)
-            const nextChange = this.changes[index + 1]
-            if (!nextChange || nextChange.modelId !== change.modelId || nextChange.modelProvider !== change.modelProvider) {
-                // Add this period's stats to the total for this model
-                if (!stats[key]) {
-                    stats[key] = {
-                        tokensIn: 0,
-                        tokensOut: 0,
-                        cost: 0
-                    }
-                }
-                if (currentPeriod[key]) {
-                    stats[key].tokensIn += currentPeriod[key].tokensIn
-                    stats[key].tokensOut += currentPeriod[key].tokensOut
-                    stats[key].cost += currentPeriod[key].cost
-                    if (currentPeriod[key].cacheWrites !== undefined) {
-                        stats[key] = stats[key] || {};
-                        stats[key].cacheWrites = (stats[key]?.cacheWrites ?? 0) + (currentPeriod[key]?.cacheWrites ?? 0);
-                    }
-                    if (currentPeriod[key].cacheReads !== undefined) {
-                        stats[key] = stats[key] || {};
-                        stats[key].cacheReads = (stats[key]?.cacheReads ?? 0) + (currentPeriod[key]?.cacheReads ?? 0);
-                    }
-                }
-                // Reset the current period for this model
-                delete currentPeriod[key]
-            }
-        })
+        }
         
         return stats
     }

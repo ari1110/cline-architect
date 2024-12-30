@@ -12,6 +12,16 @@
 			"args": ["--extensionDevelopmentPath=${workspaceFolder}"],
 			"outFiles": ["${workspaceFolder}/dist/**/*.js"],
 			"preLaunchTask": "${defaultBuildTask}"
+		},
+		{
+			"name": "Run Extension (No Rebuild)",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--no-rebuild"
+			],
+			"outFiles": ["${workspaceFolder}/dist/**/*.js"]
 		}
 	]
 }

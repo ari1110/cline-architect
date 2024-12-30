@@ -13,4 +13,5 @@ export interface ApiStreamUsageChunk {
 	cacheWriteTokens?: number
 	cacheReadTokens?: number
 	totalCost?: number // openrouter
+	timestamp?: number // When the request started, used for accurate model period attribution
 }
