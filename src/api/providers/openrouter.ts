@@ -110,8 +110,6 @@ export class OpenRouterHandler implements ApiHandler {
 		})
 
 		let genId: string | undefined
-		const requestStartTime = Date.now() // Capture timestamp when request starts
-		
 		for await (const chunk of stream) {
 			// openrouter returns an error object instead of the openai sdk throwing an error
 			if ("error" in chunk) {
@@ -153,15 +151,25 @@ export class OpenRouterHandler implements ApiHandler {
 
 			const generation = response.data?.data
 			console.log("OpenRouter generation details:", response.data)
+			const promptTokens = generation?.native_tokens_prompt || 0
+			const isCacheHit = generation?.cache_discount !== null
+			const totalCost = generation?.total_cost || 0
+			
+			// For cache hits, add back the discount to get the original cost
+			// This ensures our stats show the full cost before any cache savings
+			const effectiveCost = isCacheHit
+				? totalCost + (generation?.cache_discount || 0)
+				: totalCost
+
 			yield {
 				type: "usage",
-				// cacheWriteTokens: 0,
-				// cacheReadTokens: 0,
-				// openrouter generation endpoint fails often
-				inputTokens: generation?.native_tokens_prompt || 0,
+				inputTokens: promptTokens,
 				outputTokens: generation?.native_tokens_completion || 0,
-				totalCost: generation?.total_cost || 0,
-				timestamp: requestStartTime, // Pass original request timestamp
+				totalCost: effectiveCost,
+				timestamp: generation?.created_at ? new Date(generation.created_at).getTime() : undefined,
+				// Track cache metrics based on cache_discount
+				cacheWriteTokens: isCacheHit ? 0 : promptTokens,
+				cacheReadTokens: isCacheHit ? promptTokens : 0
 			}
 		} catch (error) {
 			// ignore if fails

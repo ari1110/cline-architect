@@ -22,8 +22,23 @@ export class ConversationState {
     /**
      * Updates usage statistics for the current model
      */
-    updateModelStats(timestamp: number, stats: Partial<import('../shared/model-tracking').ModelUsageStats>) {
-        this.modelTracker.updateUsageStats(timestamp, stats)
+    updateModelStats(timestamp: number, stats: Partial<import('../shared/model-tracking').ModelUsageStats> | { 
+        data: { 
+            id: string;
+            model: string;
+            total_cost: number;
+            tokens_prompt: number;
+            tokens_completion: number;
+            created_at: string;
+        }
+    }) {
+        if ('data' in stats) {
+            // OpenRouter details
+            this.modelTracker.updateUsageStats(timestamp, stats.data)
+        } else {
+            // Regular stats
+            this.modelTracker.updateUsageStats(timestamp, stats)
+        }
     }
 
     /**
@@ -48,7 +63,14 @@ export class ConversationState {
     }
 
     /**
-     * Gets aggregated usage stats for all models
+     * Gets the total usage stats for the entire task/conversation
+     */
+    getTaskTotals() {
+        return this.modelTracker.getTaskTotals()
+    }
+
+    /**
+     * Gets per-model usage breakdowns that sum to the task totals
      */
     getModelStats() {
         return this.modelTracker.getModelStats()
@@ -75,13 +97,15 @@ export class ConversationState {
     }
 
     /**
-     * Gets the complete state of the conversation
+     * Gets the complete state of the conversation including usage statistics
      */
     getState() {
         return {
             messages: this.getMessages(),
             modelChanges: this.getModelChanges(),
-            currentModel: this.getCurrentModel()
+            currentModel: this.getCurrentModel(),
+            taskTotals: this.getTaskTotals(),
+            modelStats: this.getModelStats()
         }
     }
 }

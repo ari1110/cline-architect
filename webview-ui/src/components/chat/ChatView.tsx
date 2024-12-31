@@ -6,7 +6,6 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import styled from "styled-components"
 import {
         ClineAsk,
-        ClineApiReqInfo,
         ClineMessage,
         ClineSayBrowserAction,
         ClineSayTool,
@@ -729,47 +728,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                                 cacheWrites={apiMetrics.totalCacheWrites}
                                                 cacheReads={apiMetrics.totalCacheReads}
                                                 totalCost={apiMetrics.totalCost}
-                                                modelChanges={(() => {
-                                                        // First try to find in task history
-                                                        const foundItem = taskHistory.find(item => item.id === task.ts.toString() || item.ts === task.ts);
-                                                        if (foundItem?.modelChanges) {
-                                                                return foundItem.modelChanges;
-                                                        }
-                                                        
-                                                        // If not in history, aggregate model changes from all API requests
-                                                        const allModelChanges = modifiedMessages
-                                                            .filter(message => message.say === "api_req_started" && message.text)
-                                                            .map(message => {
-                                                                try {
-                                                                    const info = JSON.parse(message.text!) as ClineApiReqInfo;
-                                                                    return info.modelChanges || [];
-                                                                } catch (e) {
-                                                                    console.error("Failed to parse API request info:", e);
-                                                                    return [];
-                                                                }
-                                                            })
-                                                            .flat();
-
-                                                        // Combine model changes with the same modelId and modelProvider
-                                                        const combinedChanges = new Map();
-                                                        allModelChanges.forEach(change => {
-                                                            const key = `${change.modelProvider}/${change.modelId}`;
-                                                            const existing = combinedChanges.get(key);
-                                                            if (existing && change.usage) {
-                                                                existing.usage = {
-                                                                    tokensIn: (existing.usage?.tokensIn || 0) + (change.usage.tokensIn || 0),
-                                                                    tokensOut: (existing.usage?.tokensOut || 0) + (change.usage.tokensOut || 0),
-                                                                    cacheWrites: (existing.usage?.cacheWrites || 0) + (change.usage.cacheWrites || 0),
-                                                                    cacheReads: (existing.usage?.cacheReads || 0) + (change.usage.cacheReads || 0),
-                                                                    cost: (existing.usage?.cost || 0) + (change.usage.cost || 0)
-                                                                };
-                                                            } else {
-                                                                combinedChanges.set(key, { ...change });
-                                                            }
-                                                        });
-
-                                                        return Array.from(combinedChanges.values());
-                                                })()}
+                                                modelChanges={taskHistory.find(item => item.id === task.ts.toString() || item.ts === task.ts)?.modelChanges}
                                                 onClose={handleTaskCloseButtonClick}
                                         />
                         ) : (

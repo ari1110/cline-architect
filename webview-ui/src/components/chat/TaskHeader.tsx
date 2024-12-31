@@ -111,46 +111,13 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 
         const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
 
-        type ModelStats = {
-                tokensIn: number;
-                tokensOut: number;
-                cost: number;
-        };
 
-                const { currentModelStats } = useMemo(() => {
-                        if (!modelChanges || modelChanges.length === 0) {
-                                return { currentModelStats: null as ModelStats | null };
-                        }
-
-                        // Get only the changes for the current model
-                        const currentModelChanges = modelChanges.filter(change => 
-                                change.usage && 
-                                change.modelProvider === selectedProvider && 
-                                change.modelId === selectedModelId
-                        );
-
-                        if (currentModelChanges.length === 0) {
-                                return { currentModelStats: null as ModelStats | null };
-                        }
-
-                        // Calculate cumulative stats for the current model
-                        const currentModelStats: ModelStats = {
-                                tokensIn: 0,
-                                tokensOut: 0,
-                                cost: 0
-                        };
-
-                        // Add up all usage for the current model
-                        currentModelChanges.forEach(change => {
-                                if (change.usage) {
-                                        currentModelStats.tokensIn += change.usage.tokensIn;
-                                        currentModelStats.tokensOut += change.usage.tokensOut;
-                                        currentModelStats.cost += change.usage.cost;
-                                }
-                        });
-
-                        return { currentModelStats };
-        }, [modelChanges, selectedProvider, selectedModelId]);
+                // Get the current model's stats from the last model change
+        const currentModelUsage = useMemo(() => {
+                if (!modelChanges?.length) return null;
+                // The last change is always the current model
+                return modelChanges[modelChanges.length - 1].usage;
+        }, [modelChanges]);
 
         return (
                 <div style={{ padding: "10px 13px 10px 13px" }}>
@@ -343,19 +310,19 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                                         className="codicon codicon-arrow-up"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(currentModelStats?.tokensIn || 0)}
+                                                                                                {formatLargeNumber(currentModelUsage?.tokensIn || 0)}
                                                                                         </span>
                                                                                         <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                                                                                 <i
                                                                                                         className="codicon codicon-arrow-down"
                                                                                                         style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
                                                                                                 />
-                                                                                                {formatLargeNumber(currentModelStats?.tokensOut || 0)}
+                                                                                                {formatLargeNumber(currentModelUsage?.tokensOut || 0)}
                                                                                         </span>
                                                                                 </div>
                                                                                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                                                                         <span style={{ fontWeight: "bold" }}>Cost:</span>
-                                                                                        <span>${currentModelStats?.cost.toFixed(4) || "0.0000"}</span>
+                                                                                        <span>${currentModelUsage?.cost.toFixed(4) || "0.0000"}</span>
                                                                                 </div>
                                                                         </div>
                                                                 </div>

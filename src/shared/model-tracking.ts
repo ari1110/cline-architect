@@ -1,5 +1,5 @@
 /**
- * Represents a model change during a conversation
+ * Represents usage statistics for a model or task
  */
 export interface ModelUsageStats {
     tokensIn: number
@@ -9,25 +9,68 @@ export interface ModelUsageStats {
     cost: number
 }
 
+/**
+ * Represents a model usage period during a task
+ */
 export interface ModelChange {
     modelId: string
     modelProvider: string
     startTs: number // Timestamp when this model became active
     endTs?: number  // Timestamp when this model was replaced (undefined if still active)
-    usage?: ModelUsageStats // Usage statistics for this model during its active period
+    usage: ModelUsageStats // Usage statistics for this model during its active period
 }
 
 /**
- * Manages model changes and usage statistics during a conversation
+ * OpenRouter generation details format
+ */
+interface OpenRouterStats {
+    id: string
+    model: string
+    total_cost: number
+    tokens_prompt: number
+    tokens_completion: number
+    created_at: string
+}
+
+/**
+ * Manages model changes and usage statistics during a task.
+ * Uses a top-down approach where task totals are the source of truth,
+ * and per-model stats are tracked as portions of these totals.
  */
 export class ModelTracker {
     private changes: ModelChange[] = []
+    private taskTotals: ModelUsageStats = {
+        tokensIn: 0,
+        tokensOut: 0,
+        cost: 0,
+        cacheWrites: 0,
+        cacheReads: 0
+    }
     private currentGenerationStats: Partial<ModelUsageStats> = {}
+    private processedRequests: Set<string> = new Set()
 
     constructor(initialChanges?: ModelChange[]) {
         if (initialChanges) {
             this.changes = [...initialChanges]
+            // Calculate initial task totals from changes
+            this.taskTotals = this.calculateTaskTotals(initialChanges)
         }
+    }
+
+    private calculateTaskTotals(changes: ModelChange[]): ModelUsageStats {
+        return changes.reduce((totals, change) => ({
+            tokensIn: totals.tokensIn + (change.usage?.tokensIn || 0),
+            tokensOut: totals.tokensOut + (change.usage?.tokensOut || 0),
+            cost: totals.cost + (change.usage?.cost || 0),
+            cacheWrites: (totals.cacheWrites || 0) + (change.usage?.cacheWrites || 0),
+            cacheReads: (totals.cacheReads || 0) + (change.usage?.cacheReads || 0)
+        }), {
+            tokensIn: 0,
+            tokensOut: 0,
+            cost: 0,
+            cacheWrites: 0,
+            cacheReads: 0
+        })
     }
 
     private resetCurrentGenerationStats() {
@@ -40,78 +83,134 @@ export class ModelTracker {
      * This ensures delayed stats (like OpenRouter's generation details) are attributed to the correct model
      * period, even if they arrive after switching to a different model.
      */
-    updateUsageStats(timestamp: number, stats: Partial<ModelUsageStats & { timestamp?: number }>) {
-        // Use the provided timestamp from stats if available (e.g. from OpenRouter's delayed stats),
-        // otherwise fall back to the passed timestamp
-        const effectiveTimestamp = stats.timestamp || timestamp
-        
-        // Find which model was active at this timestamp
-        const modelAtTimestamp = this.changes.find(change => 
-            change.startTs <= effectiveTimestamp && 
-            (!change.endTs || change.endTs > effectiveTimestamp)
-        )
-        
-        if (!modelAtTimestamp) {return}
+    updateUsageStats(timestamp: number, stats: Partial<ModelUsageStats & { timestamp?: number } & OpenRouterStats>) {
+        const requestStartTime = stats.timestamp || timestamp
 
-        // Initialize usage if needed
-        if (!modelAtTimestamp.usage) {
-            modelAtTimestamp.usage = {
-                tokensIn: 0,
-                tokensOut: 0,
-                cost: 0
-            }
+        // Skip if we've already processed this request
+        if (stats.id && this.processedRequests.has(stats.id)) {
+            return
         }
-        
-        // If we get cost or totalCost, this is the final generation stats
-        if (stats.cost !== undefined || 'totalCost' in stats) {
-            // Reset current generation stats and use the final values
-            this.resetCurrentGenerationStats()
-            // Set the values directly instead of adding to them
-            modelAtTimestamp.usage.tokensIn = stats.tokensIn || 0
-            modelAtTimestamp.usage.tokensOut = stats.tokensOut || 0
-            modelAtTimestamp.usage.cost = stats.cost || (stats as any).totalCost || 0
-            if (stats.cacheWrites !== undefined) {
-                modelAtTimestamp.usage.cacheWrites = stats.cacheWrites
-            }
-            if (stats.cacheReads !== undefined) {
-                modelAtTimestamp.usage.cacheReads = stats.cacheReads
+        if (stats.id) {
+            this.processedRequests.add(stats.id)
+        }
+
+        // Find which model period this request belongs to
+        const modelForRequest = this.changes.find(change => {
+            const belongsToThisPeriod = change.startTs <= requestStartTime && 
+                (!change.endTs || change.endTs > requestStartTime)
+            
+            return belongsToThisPeriod
+        })
+
+        // If we get total_cost, this is the final generation stats from OpenRouter
+        if ('total_cost' in stats && 'model' in stats) {
+            // Verify this request belongs to the model we think it does
+            if (modelForRequest && modelForRequest.modelId === stats.model) {
+                // Reset current generation stats and use the final values
+                this.resetCurrentGenerationStats()
+                
+                // Update task totals (the source of truth)
+                const oldTotals = { ...this.taskTotals }
+                this.taskTotals.tokensIn += stats.tokens_prompt || 0
+                this.taskTotals.tokensOut += stats.tokens_completion || 0
+                // Use total_cost from OpenRouter as our cost value
+                const cost = stats.total_cost || 0
+                this.taskTotals.cost += cost
+                if (stats.cacheWrites !== undefined) {
+                    this.taskTotals.cacheWrites = (this.taskTotals.cacheWrites || 0) + stats.cacheWrites
+                }
+                if (stats.cacheReads !== undefined) {
+                    this.taskTotals.cacheReads = (this.taskTotals.cacheReads || 0) + stats.cacheReads
+                }
+
+                // Initialize usage if needed
+                if (!modelForRequest.usage) {
+                    modelForRequest.usage = {
+                        tokensIn: 0,
+                        tokensOut: 0,
+                        cost: 0,
+                        cacheWrites: 0,
+                        cacheReads: 0
+                    }
+                }
+                
+                // Set the current model's stats directly from the API response
+                modelForRequest.usage = {
+                    tokensIn: stats.tokens_prompt || 0,
+                    tokensOut: stats.tokens_completion || 0,
+                    cost: cost,
+                    cacheWrites: stats.cacheWrites || 0,
+                    cacheReads: stats.cacheReads || 0
+                }
+
+                console.log('Model stats updated:', {
+                    model: `${modelForRequest.modelProvider}/${modelForRequest.modelId}`,
+                    stats: modelForRequest.usage
+                })
             }
         } else {
-            // Accumulate intermediate stats until we get final values
-            this.currentGenerationStats.tokensIn = (this.currentGenerationStats.tokensIn || 0) + (stats.tokensIn || 0)
-            this.currentGenerationStats.tokensOut = (this.currentGenerationStats.tokensOut || 0) + (stats.tokensOut || 0)
+            // Update model stats with regular stats
+            if (modelForRequest) {
+                // Initialize usage if needed
+                if (!modelForRequest.usage) {
+                    modelForRequest.usage = {
+                        tokensIn: 0,
+                        tokensOut: 0,
+                        cost: 0,
+                        cacheWrites: 0,
+                        cacheReads: 0
+                    }
+                }
+
+                // Update the model's stats
+                modelForRequest.usage = {
+                    tokensIn: (modelForRequest.usage.tokensIn || 0) + (stats.tokensIn || 0),
+                    tokensOut: (modelForRequest.usage.tokensOut || 0) + (stats.tokensOut || 0),
+                    cost: (modelForRequest.usage.cost || 0) + (stats.cost || 0),
+                    cacheWrites: (modelForRequest.usage.cacheWrites || 0) + (stats.cacheWrites || 0),
+                    cacheReads: (modelForRequest.usage.cacheReads || 0) + (stats.cacheReads || 0)
+                }
+
+                // Update task totals
+                this.taskTotals.tokensIn += stats.tokensIn || 0
+                this.taskTotals.tokensOut += stats.tokensOut || 0
+                this.taskTotals.cost += stats.cost || 0
+                if (stats.cacheWrites !== undefined) {
+                    this.taskTotals.cacheWrites = (this.taskTotals.cacheWrites || 0) + stats.cacheWrites
+                }
+                if (stats.cacheReads !== undefined) {
+                    this.taskTotals.cacheReads = (this.taskTotals.cacheReads || 0) + stats.cacheReads
+                }
+
+            }
         }
     }
 
     /**
-     * Gets usage stats for all models by taking a snapshot of each model's most recent usage.
-     * Important: This does NOT recalculate or accumulate stats. For each model, it only uses
-     * the most recent usage numbers, completely ignoring any older usage stats for that model.
-     * This ensures that switching models does not affect the previous model's stats.
+     * Gets the total usage stats for the entire task
+     */
+    getTaskTotals(): ModelUsageStats {
+        return { ...this.taskTotals }
+    }
+
+    /**
+     * Gets per-model usage breakdowns that sum to the task totals.
+     * Each model's stats represent its portion of the task totals.
      */
     getModelStats(): Record<string, ModelUsageStats> {
         const stats: Record<string, ModelUsageStats> = {}
         
-        // Process changes in reverse order (newest to oldest)
-        for (let i = this.changes.length - 1; i >= 0; i--) {
-            const change = this.changes[i]
+        // Show stats for all models, both active and inactive
+        for (const change of this.changes) {
             const key = `${change.modelProvider}/${change.modelId}`
-            
-            // Skip if we already have stats for this model (ensures we only use the most recent)
-            // This prevents older usage stats from affecting the numbers we've already recorded
-            if (!stats[key] && change.usage) {
+            if (change.usage) {
+                // Each model's stats reflect its usage during its active period
                 stats[key] = {
-                    tokensIn: change.usage.tokensIn || 0,
-                    tokensOut: change.usage.tokensOut || 0,
-                    cost: change.usage.cost || 0
-                }
-                
-                // Add cache stats if present
-                if (change.usage.cacheWrites !== undefined) {
-                    stats[key].cacheWrites = change.usage.cacheWrites
-                }
-                if (change.usage.cacheReads !== undefined) {
-                    stats[key].cacheReads = change.usage.cacheReads
+                    tokensIn: change.usage.tokensIn,
+                    tokensOut: change.usage.tokensOut,
+                    cost: change.usage.cost,
+                    cacheWrites: change.usage.cacheWrites || 0,
+                    cacheReads: change.usage.cacheReads || 0
                 }
             }
         }
@@ -120,22 +219,54 @@ export class ModelTracker {
     }
     
     /**
-     * Records a model change in the conversation
+     * Records a model change in the task
      */
     addChange(modelId: string, modelProvider: string, timestamp: number) {
+        console.log('Model change requested:', {
+            timestamp: new Date(timestamp).toISOString(),
+            newModel: `${modelProvider}/${modelId}`
+        })
+
         // If there are existing changes, close the last one
         if (this.changes.length > 0) {
             const lastChange = this.changes[this.changes.length - 1]
             if (!lastChange.endTs) {
+                // Preserve the accumulated stats when ending the period
+                const finalStats = lastChange.usage || {
+                    tokensIn: 0,
+                    tokensOut: 0,
+                    cost: 0,
+                    cacheWrites: 0,
+                    cacheReads: 0
+                }
+                
                 lastChange.endTs = timestamp
             }
         }
         
-        // Add the new change
-        this.changes.push({
+        // Add the new change with zeroed usage stats
+        const newChange = {
             modelId,
             modelProvider,
-            startTs: timestamp
+            startTs: timestamp,
+            usage: {
+                tokensIn: 0,
+                tokensOut: 0,
+                cost: 0,
+                cacheWrites: 0,
+                cacheReads: 0
+            }
+        }
+        this.changes.push(newChange)
+
+        // Reset currentGenerationStats since we're starting a new model period
+        this.resetCurrentGenerationStats()
+
+        console.log('Model changed:', {
+            from: this.changes.length > 1 ? 
+                `${this.changes[this.changes.length - 2].modelProvider}/${this.changes[this.changes.length - 2].modelId}` : 
+                'none',
+            to: `${modelProvider}/${modelId}`
         })
     }
 
