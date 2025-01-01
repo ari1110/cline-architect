@@ -9,7 +9,7 @@ import ModelIdentifier from "./ModelIdentifier"
 import { mentionRegexGlobal } from "../../../../src/shared/context-mentions"
 import { formatLargeNumber } from "../../utils/format"
 import { normalizeApiConfiguration } from "../settings/ApiOptions"
-import { ModelChange } from "../../../../src/shared/model-tracking"
+import { ModelTracker } from "../../../../src/shared/model-tracking"
 
 interface TaskHeaderProps {
         task: ClineMessage
@@ -19,7 +19,7 @@ interface TaskHeaderProps {
         cacheWrites?: number
         cacheReads?: number
         totalCost: number
-        modelChanges?: ModelChange[]
+        modelTracker: ModelTracker
         onClose: () => void
 }
 
@@ -31,7 +31,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
         cacheWrites,
         cacheReads,
         totalCost,
-        modelChanges,
+        modelTracker,
         onClose,
 }) => {
         const { apiConfiguration } = useExtensionState()
@@ -112,12 +112,36 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
         const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
 
 
-                // Get the current model's stats from the last model change
-        const currentModelUsage = useMemo(() => {
-                if (!modelChanges?.length) return null;
-                // The last change is always the current model
-                return modelChanges[modelChanges.length - 1].usage;
-        }, [modelChanges]);
+        const { currentModelUsage, modelStats, allChanges } = useMemo(() => {
+                const currentModel = modelTracker.getCurrentModel();
+                const stats = modelTracker.getModelStats();
+                const changes = modelTracker.getAllChanges();
+                const usage = currentModel 
+                    ? stats[`${currentModel.modelProvider}/${currentModel.modelId}`]
+                    : null;
+                
+                console.log('TaskHeader model stats:', {
+                    currentModel,
+                    allStats: stats,
+                    currentModelUsage: usage,
+                    statsKey: currentModel ? `${currentModel.modelProvider}/${currentModel.modelId}` : 'no current model',
+                    changes: changes.map(c => ({
+                        model: `${c.modelProvider}/${c.modelId}`,
+                        startTs: new Date(c.startTs).toISOString(),
+                        endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined
+                    }))
+                });
+                
+                return {
+                    currentModelUsage: usage,
+                    modelStats: stats,
+                    allChanges: changes
+                };
+        }, [modelTracker]);
+
+        useEffect(() => {
+            console.log('Model changes count:', allChanges.length);
+        }, [allChanges]);
 
         return (
                 <div style={{ padding: "10px 13px 10px 13px" }}>
@@ -355,7 +379,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                 gap: "8px",
                                                                                 marginLeft: "auto"
                                                                         }}>
-                                                                                {modelChanges && modelChanges.length > 1 && (
+                                                                                {allChanges.length > 1 && (
                                                                                         <div
                                                                                                 onClick={() => setIsModelStatsExpanded(!isModelStatsExpanded)}
                                                                                                 style={{
@@ -377,7 +401,9 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                         paddingTop: 8,
                                                                                         borderTop: '1px solid var(--vscode-textBlockQuote-border)',
                                                                                 }}>
-                                                                                        {modelChanges?.map((change: ModelChange) => change.usage && (
+                                                                                        {modelTracker.getAllChanges().map((change) => {
+                                                                                const stats = modelStats[`${change.modelProvider}/${change.modelId}`];
+                                                                                return stats && (
                                                                                 <div 
                                                                                         key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}
                                                                                         style={{ 
@@ -400,7 +426,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                                 }}>
                                                                                                         {change.modelProvider}/{change.modelId}
                                                                                                 </span>
-                                                                                                <span style={{ fontWeight: 500 }}>${change.usage.cost.toFixed(4)}</span>
+                                                                                                <span style={{ fontWeight: 500 }}>${stats.cost.toFixed(4)}</span>
                                                                                         </div>
                                                                                         <div style={{ 
                                                                                                 display: "flex", 
@@ -408,13 +434,13 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                                 opacity: 0.7,
                                                                                                 marginTop: 4
                                                                                         }}>
-                                                                                                <span>↑{formatLargeNumber(change.usage.tokensIn)} ↓{formatLargeNumber(change.usage.tokensOut)}</span>
-                                                                                                {!!change.usage.cacheWrites && (
-                                                                                                        <span>Cache: +{formatLargeNumber(change.usage.cacheWrites)} → {formatLargeNumber(change.usage.cacheReads || 0)}</span>
+                                                                                                <span>↑{formatLargeNumber(stats.tokensIn)} ↓{formatLargeNumber(stats.tokensOut)}</span>
+                                                                                                {!!stats.cacheWrites && (
+                                                                                                        <span>Cache: +{formatLargeNumber(stats.cacheWrites)} → {formatLargeNumber(stats.cacheReads || 0)}</span>
                                                                                                 )}
                                                                                         </div>
                                                                                 </div>
-                                                                        ))}
+                                                                        )})}
                                                                                 </div>
                                                                         )}
                                                                 </>

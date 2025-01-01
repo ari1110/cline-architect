@@ -1,3 +1,6 @@
+import { ClineMessage, ClineApiReqInfo } from "./ExtensionMessage"
+import { findLast } from "./array"
+
 /**
  * Represents usage statistics for a model or task
  */
@@ -37,6 +40,68 @@ interface OpenRouterStats {
  * Uses a top-down approach where task totals are the source of truth,
  * and per-model stats are tracked as portions of these totals.
  */
+/**
+ * Gets a ModelTracker instance from an array of ClineMessages.
+ * 
+ * This function finds the latest api_req_started message that contains model changes
+ * and creates a ModelTracker instance from those changes.
+ */
+export function getModelTracker(messages: ClineMessage[]): ModelTracker {
+    console.log('getModelTracker called with messages:', messages.map(m => ({
+        type: m.type,
+        say: m.say,
+        ts: new Date(m.ts).toISOString()
+    })))
+    
+    // Find all api_req_started messages to accumulate all model changes
+    const allModelChanges: ModelChange[] = []
+    
+    for (const message of messages) {
+        if (message.type === "say" && 
+            message.say === "api_req_started" && 
+            message.text !== undefined) {
+            try {
+                const parsedData = JSON.parse(message.text) as ClineApiReqInfo
+                console.log('Processing api_req_started:', {
+                    ts: new Date(message.ts).toISOString(),
+                    modelChanges: parsedData.modelChanges?.map(c => ({
+                        model: `${c.modelProvider}/${c.modelId}`,
+                        startTs: new Date(c.startTs).toISOString(),
+                        endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined,
+                        usage: c.usage
+                    }))
+                })
+                
+                if (parsedData.modelChanges) {
+                    // Add any new model changes that aren't already in the list
+                    parsedData.modelChanges.forEach(change => {
+                        const exists = allModelChanges.some(
+                            existing => 
+                                existing.modelId === change.modelId && 
+                                existing.modelProvider === change.modelProvider && 
+                                existing.startTs === change.startTs
+                        )
+                        if (!exists) {
+                            allModelChanges.push(change)
+                        }
+                    })
+                }
+            } catch (error) {
+                console.error("Error parsing JSON:", error)
+            }
+        }
+    }
+
+    console.log('Creating ModelTracker with changes:', allModelChanges.map(c => ({
+        model: `${c.modelProvider}/${c.modelId}`,
+        startTs: new Date(c.startTs).toISOString(),
+        endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined,
+        usage: c.usage
+    })))
+    
+    return new ModelTracker(allModelChanges)
+}
+
 export class ModelTracker {
     private changes: ModelChange[] = []
     private taskTotals: ModelUsageStats = {
@@ -99,13 +164,20 @@ export class ModelTracker {
             const belongsToThisPeriod = change.startTs <= requestStartTime && 
                 (!change.endTs || change.endTs > requestStartTime)
             
+            // For OpenRouter responses, match just the model part after the provider
+            if ('model' in stats && stats.model) {
+                const openRouterModel = stats.model;
+                const changeModel = `${change.modelProvider}/${change.modelId}`;
+                return belongsToThisPeriod && changeModel.endsWith(openRouterModel);
+            }
+            
             return belongsToThisPeriod
         })
 
         // If we get total_cost, this is the final generation stats from OpenRouter
         if ('total_cost' in stats && 'model' in stats) {
-            // Verify this request belongs to the model we think it does
-            if (modelForRequest && modelForRequest.modelId === stats.model) {
+            // Model matching is now handled in the find() above
+            if (modelForRequest) {
                 // Reset current generation stats and use the final values
                 this.resetCurrentGenerationStats()
                 
@@ -134,13 +206,13 @@ export class ModelTracker {
                     }
                 }
                 
-                // Set the current model's stats directly from the API response
+                // Accumulate the model's stats with the API response
                 modelForRequest.usage = {
-                    tokensIn: stats.tokens_prompt || 0,
-                    tokensOut: stats.tokens_completion || 0,
-                    cost: cost,
-                    cacheWrites: stats.cacheWrites || 0,
-                    cacheReads: stats.cacheReads || 0
+                    tokensIn: (modelForRequest.usage?.tokensIn || 0) + (stats.tokens_prompt || 0),
+                    tokensOut: (modelForRequest.usage?.tokensOut || 0) + (stats.tokens_completion || 0),
+                    cost: (modelForRequest.usage?.cost || 0) + cost,
+                    cacheWrites: (modelForRequest.usage?.cacheWrites || 0) + (stats.cacheWrites || 0),
+                    cacheReads: (modelForRequest.usage?.cacheReads || 0) + (stats.cacheReads || 0)
                 }
 
                 console.log('Model stats updated:', {
@@ -200,6 +272,15 @@ export class ModelTracker {
     getModelStats(): Record<string, ModelUsageStats> {
         const stats: Record<string, ModelUsageStats> = {}
         
+        console.log('getModelStats called:', {
+            changes: this.changes.map(c => ({
+                model: `${c.modelProvider}/${c.modelId}`,
+                startTs: new Date(c.startTs).toISOString(),
+                endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined,
+                usage: c.usage
+            }))
+        })
+        
         // Show stats for all models, both active and inactive
         for (const change of this.changes) {
             const key = `${change.modelProvider}/${change.modelId}`
@@ -215,6 +296,7 @@ export class ModelTracker {
             }
         }
         
+        console.log('Returning stats:', stats)
         return stats
     }
     
@@ -302,12 +384,23 @@ export class ModelTracker {
      */
     getCurrentModel(): { modelId: string; modelProvider: string } | undefined {
         const lastChange = this.changes[this.changes.length - 1]
+        console.log('getCurrentModel called:', {
+            changes: this.changes.map(c => ({
+                model: `${c.modelProvider}/${c.modelId}`,
+                startTs: new Date(c.startTs).toISOString(),
+                endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined,
+                isLast: c === lastChange
+            }))
+        })
         if (lastChange && !lastChange.endTs) {
-            return {
+            const result = {
                 modelId: lastChange.modelId,
                 modelProvider: lastChange.modelProvider
             }
+            console.log('Returning current model:', result)
+            return result
         }
+        console.log('No current model (last change has endTs or no changes)')
         return undefined
     }
 }
