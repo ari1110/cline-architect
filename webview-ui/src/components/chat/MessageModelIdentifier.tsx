@@ -11,7 +11,7 @@ const Container = styled.div`
         background-color: color-mix(in srgb, var(--vscode-badge-foreground) 15%, transparent);
         border-radius: 3px;
         margin-right: 8px;
-    margin-bottom: 6px;
+        margin-bottom: 6px;
         font-size: 12px;
         flex-shrink: 0;
 `

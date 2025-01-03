@@ -24,6 +24,7 @@ import BrowserSessionRow from "./BrowserSessionRow"
 import ChatRow from "./ChatRow"
 import ChatTextArea from "./ChatTextArea"
 import TaskHeader from "./TaskHeader"
+import ModelIdentifier from "./ModelIdentifier"
 import AutoApproveMenu from "./AutoApproveMenu"
 
 interface ChatViewProps {
@@ -722,6 +723,10 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                 overflow: "hidden",
                         }}>
                         {task ? (
+                                <>
+                                        <div style={{ padding: "10px 13px 0 13px" }}>
+                                                <ModelIdentifier />
+                                        </div>
                                         <TaskHeader
                                                 task={task}
                                                 tokensIn={apiMetrics.totalTokensIn}
@@ -732,6 +737,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                                 totalCost={apiMetrics.totalCost}
                                                 onClose={handleTaskCloseButtonClick}
                                         />
+                                </>
                         ) : (
                                 <div
                                         style={{

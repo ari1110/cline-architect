@@ -5,7 +5,6 @@ import { ClineMessage } from "../../../../src/shared/ExtensionMessage"
 import { useExtensionState } from "../../context/ExtensionStateContext"
 import { vscode } from "../../utils/vscode"
 import Thumbnails from "../common/Thumbnails"
-import ModelIdentifier from "./ModelIdentifier"
 import { mentionRegexGlobal } from "../../../../src/shared/context-mentions"
 import { formatLargeNumber } from "../../utils/format"
 import { normalizeApiConfiguration } from "../settings/ApiOptions"
@@ -158,15 +157,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                 minWidth: 0, // This allows the div to shrink below its content size
                                                         }}>
                                                         <span style={{ fontWeight: "bold", marginRight: '8px' }}>Task{!isTaskExpanded && ":"}</span>
-                                                        <div style={{ 
-                                                                flexGrow: 1, 
-                                                                display: 'flex', 
-                                                                justifyContent: 'center' 
-                                                        }}>
-                                                                <ModelIdentifier 
-                                                                        modelName={`${selectedProvider.split('-')[0].charAt(0).toUpperCase() + selectedProvider.split('-')[0].slice(1)} ${selectedModelId}`} 
-                                                                />
-                                                        </div>
+                                                        <div style={{ flexGrow: 1 }} />
                                                 </div>
                                         </div>
                                         {!isTaskExpanded && isCostAvailable && (
