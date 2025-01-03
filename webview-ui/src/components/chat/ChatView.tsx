@@ -12,7 +12,6 @@ import {
         ExtensionMessage,
 } from "../../../../src/shared/ExtensionMessage"
 import { findLast } from "../../../../src/shared/array"
-import { getModelTracker } from "../../../../src/shared/model-tracking"
 import { combineApiRequests } from "../../../../src/shared/combineApiRequests"
 import { combineCommandSequences } from "../../../../src/shared/combineCommandSequences"
 import { getApiMetrics } from "../../../../src/shared/getApiMetrics"
@@ -41,7 +40,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 
         //const task = messages.length > 0 ? (messages[0].say === "task" ? messages[0] : undefined) : undefined) : undefined
         const task = useMemo(() => messages.at(0), [messages]) // leaving this less safe version here since if the first message is not a task, then the extension is in a bad state and needs to be debugged (see Cline.abort)
-        const modifiedMessages = useMemo(() => combineApiRequests(combineCommandSequences(messages)), [messages])
+        const modifiedMessages = useMemo(() => combineApiRequests(combineCommandSequences(messages.slice(1))), [messages])
         // has to be after api_req_finished are all reduced into api_req_started messages
         const apiMetrics = useMemo(() => getApiMetrics(modifiedMessages), [modifiedMessages])
 
@@ -367,8 +366,6 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                 return normalizeApiConfiguration(apiConfiguration)
         }, [apiConfiguration])
 
-        const memoizedModelTracker = useMemo(() => getModelTracker(modifiedMessages), [modifiedMessages])
-
         const selectImages = useCallback(() => {
                 vscode.postMessage({ type: "selectImages" })
         }, [])
@@ -455,6 +452,8 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                         return false
                         }
                         switch (message.say) {
+                                case "task": // Don't show task messages in chat since they're shown in TaskHeader
+                                        return false
                                 case "api_req_finished": // combineApiRequests removes this from modifiedMessages anyways
                                 case "api_req_retried": // this message is used to update the latest api_req_started that the request was retried
                                         return false
@@ -731,7 +730,6 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                                 cacheWrites={apiMetrics.totalCacheWrites}
                                                 cacheReads={apiMetrics.totalCacheReads}
                                                 totalCost={apiMetrics.totalCost}
-                                                modelTracker={memoizedModelTracker}
                                                 onClose={handleTaskCloseButtonClick}
                                         />
                         ) : (

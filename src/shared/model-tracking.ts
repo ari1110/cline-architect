@@ -102,6 +102,20 @@ export function getModelTracker(messages: ClineMessage[]): ModelTracker {
     return new ModelTracker(allModelChanges)
 }
 
+/**
+ * Gets the currently active model from an array of model changes
+ */
+export function getCurrentModel(changes: ModelChange[]): { modelId: string; modelProvider: string } | undefined {
+    const lastChange = changes[changes.length - 1]
+    if (lastChange && !lastChange.endTs) {
+        return {
+            modelId: lastChange.modelId,
+            modelProvider: lastChange.modelProvider
+        }
+    }
+    return undefined
+}
+
 export class ModelTracker {
     private changes: ModelChange[] = []
     private taskTotals: ModelUsageStats = {
@@ -383,24 +397,6 @@ export class ModelTracker {
      * Gets the currently active model
      */
     getCurrentModel(): { modelId: string; modelProvider: string } | undefined {
-        const lastChange = this.changes[this.changes.length - 1]
-        console.log('getCurrentModel called:', {
-            changes: this.changes.map(c => ({
-                model: `${c.modelProvider}/${c.modelId}`,
-                startTs: new Date(c.startTs).toISOString(),
-                endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined,
-                isLast: c === lastChange
-            }))
-        })
-        if (lastChange && !lastChange.endTs) {
-            const result = {
-                modelId: lastChange.modelId,
-                modelProvider: lastChange.modelProvider
-            }
-            console.log('Returning current model:', result)
-            return result
-        }
-        console.log('No current model (last change has endTs or no changes)')
-        return undefined
+        return getCurrentModel(this.changes);
     }
 }

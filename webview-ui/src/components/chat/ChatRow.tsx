@@ -759,11 +759,9 @@ const ChatRowContentInner = ({
                                 case "text":
                                         return (
                                                 <div>
-                                                        {(message.say === "text" || message.say === "api_req_started") && (
-                                                                <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
-                            <MessageModelIdentifier timestamp={message.ts} />
-                                                                </div>
-                                                        )}
+                                        <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+                                            <MessageModelIdentifier timestamp={message.ts} />
+                                        </div>
                                                         <Markdown markdown={message.text} />
                                                 </div>
                                         )

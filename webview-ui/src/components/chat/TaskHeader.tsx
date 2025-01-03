@@ -9,7 +9,6 @@ import ModelIdentifier from "./ModelIdentifier"
 import { mentionRegexGlobal } from "../../../../src/shared/context-mentions"
 import { formatLargeNumber } from "../../utils/format"
 import { normalizeApiConfiguration } from "../settings/ApiOptions"
-import { ModelTracker } from "../../../../src/shared/model-tracking"
 
 interface TaskHeaderProps {
         task: ClineMessage
@@ -19,7 +18,6 @@ interface TaskHeaderProps {
         cacheWrites?: number
         cacheReads?: number
         totalCost: number
-        modelTracker: ModelTracker
         onClose: () => void
 }
 
@@ -31,14 +29,12 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
         cacheWrites,
         cacheReads,
         totalCost,
-        modelTracker,
         onClose,
 }) => {
         const { apiConfiguration } = useExtensionState()
         const [isTaskExpanded, setIsTaskExpanded] = useState(true)
         const [isTextExpanded, setIsTextExpanded] = useState(false)
         const [showSeeMore, setShowSeeMore] = useState(false)
-        const [isModelStatsExpanded, setIsModelStatsExpanded] = useState(false)
         const textContainerRef = useRef<HTMLDivElement>(null)
         const textRef = useRef<HTMLDivElement>(null)
 
@@ -110,38 +106,6 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
         }, [apiConfiguration])
 
         const shouldShowPromptCacheInfo = doesModelSupportPromptCache && apiConfiguration?.apiProvider !== "openrouter"
-
-
-        const { currentModelUsage, modelStats, allChanges } = useMemo(() => {
-                const currentModel = modelTracker.getCurrentModel();
-                const stats = modelTracker.getModelStats();
-                const changes = modelTracker.getAllChanges();
-                const usage = currentModel 
-                    ? stats[`${currentModel.modelProvider}/${currentModel.modelId}`]
-                    : null;
-                
-                console.log('TaskHeader model stats:', {
-                    currentModel,
-                    allStats: stats,
-                    currentModelUsage: usage,
-                    statsKey: currentModel ? `${currentModel.modelProvider}/${currentModel.modelId}` : 'no current model',
-                    changes: changes.map(c => ({
-                        model: `${c.modelProvider}/${c.modelId}`,
-                        startTs: new Date(c.startTs).toISOString(),
-                        endTs: c.endTs ? new Date(c.endTs).toISOString() : undefined
-                    }))
-                });
-                
-                return {
-                    currentModelUsage: usage,
-                    modelStats: stats,
-                    allChanges: changes
-                };
-        }, [modelTracker]);
-
-        useEffect(() => {
-            console.log('Model changes count:', allChanges.length);
-        }, [allChanges]);
 
         return (
                 <div style={{ padding: "10px 13px 10px 13px" }}>
@@ -326,29 +290,6 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                                         <span>${totalCost.toFixed(4)}</span>
                                                                                 </div>
                                                                         </div>
-                                                                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", opacity: 0.8 }}>
-                                                                                <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
-                                                                                        <span style={{ fontWeight: "bold" }}>Current Model:</span>
-                                                                                        <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                                                                                                <i
-                                                                                                        className="codicon codicon-arrow-up"
-                                                                                                        style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
-                                                                                                />
-                                                                                                {formatLargeNumber(currentModelUsage?.tokensIn || 0)}
-                                                                                        </span>
-                                                                                        <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                                                                                                <i
-                                                                                                        className="codicon codicon-arrow-down"
-                                                                                                        style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "-2px" }}
-                                                                                                />
-                                                                                                {formatLargeNumber(currentModelUsage?.tokensOut || 0)}
-                                                                                        </span>
-                                                                                </div>
-                                                                                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                                                        <span style={{ fontWeight: "bold" }}>Cost:</span>
-                                                                                        <span>${currentModelUsage?.cost.toFixed(4) || "0.0000"}</span>
-                                                                                </div>
-                                                                        </div>
                                                                 </div>
                                                                 {!isCostAvailable && <ExportButton />}
                                                         </div>
@@ -373,77 +314,13 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                                 </div>
                                                         )}
                                                         {isCostAvailable && (
-                                                                <>
-                                                                        <div style={{ 
-                                                                                display: "flex", 
-                                                                                gap: "8px",
-                                                                                marginLeft: "auto"
-                                                                        }}>
-                                                                                {allChanges.length > 1 && (
-                                                                                        <div
-                                                                                                onClick={() => setIsModelStatsExpanded(!isModelStatsExpanded)}
-                                                                                                style={{
-                                                                                                        cursor: "pointer",
-                                                                                                        display: "flex",
-                                                                                                        alignItems: "center",
-                                                                                                        gap: "4px",
-                                                                                                        color: "var(--vscode-textLink-foreground)",
-                                                                                                }}>
-                                                                                                <span className={`codicon codicon-chevron-${isModelStatsExpanded ? "down" : "right"}`}></span>
-                                                                                                <span>Per Model Usage</span>
-                                                                                        </div>
-                                                                                )}
-                                                                                <ExportButton />
-                                                                        </div>
-                                                                        {isModelStatsExpanded && (
-                                                                                <div style={{ 
-                                                                                        marginTop: 8,
-                                                                                        paddingTop: 8,
-                                                                                        borderTop: '1px solid var(--vscode-textBlockQuote-border)',
-                                                                                }}>
-                                                                                        {modelTracker.getAllChanges().map((change) => {
-                                                                                const stats = modelStats[`${change.modelProvider}/${change.modelId}`];
-                                                                                return stats && (
-                                                                                <div 
-                                                                                        key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}
-                                                                                        style={{ 
-                                                                                                marginTop: 4,
-                                                                                                padding: "6px 10px",
-                                                                                                backgroundColor: "var(--vscode-textBlockQuote-background)",
-                                                                                                borderRadius: 3,
-                                                                                                fontSize: "0.85em",
-                                                                                                border: "1px solid var(--vscode-textBlockQuote-border)"
-                                                                                        }}>
-                                                                                        <div style={{ 
-                                                                                                display: "flex", 
-                                                                                                justifyContent: "space-between",
-                                                                                                marginBottom: 2
-                                                                                        }}>
-                                                                                                <span style={{ 
-                                                                                                        fontWeight: 600,
-                                                                                                        color: 'var(--vscode-textLink-foreground)',
-                                                                                                        opacity: 0.8
-                                                                                                }}>
-                                                                                                        {change.modelProvider}/{change.modelId}
-                                                                                                </span>
-                                                                                                <span style={{ fontWeight: 500 }}>${stats.cost.toFixed(4)}</span>
-                                                                                        </div>
-                                                                                        <div style={{ 
-                                                                                                display: "flex", 
-                                                                                                gap: 12, 
-                                                                                                opacity: 0.7,
-                                                                                                marginTop: 4
-                                                                                        }}>
-                                                                                                <span>↑{formatLargeNumber(stats.tokensIn)} ↓{formatLargeNumber(stats.tokensOut)}</span>
-                                                                                                {!!stats.cacheWrites && (
-                                                                                                        <span>Cache: +{formatLargeNumber(stats.cacheWrites)} → {formatLargeNumber(stats.cacheReads || 0)}</span>
-                                                                                                )}
-                                                                                        </div>
-                                                                                </div>
-                                                                        )})}
-                                                                                </div>
-                                                                        )}
-                                                                </>
+                                                        <div style={{ 
+                                                                display: "flex", 
+                                                                gap: "8px",
+                                                                marginLeft: "auto"
+                                                        }}>
+                                                                <ExportButton />
+                                                        </div>
                                                         )}
                                                 </div>
                                         </>
