@@ -8,6 +8,9 @@ import Thumbnails from "../common/Thumbnails"
 import { mentionRegexGlobal } from "../../../../src/shared/context-mentions"
 import { formatLargeNumber } from "../../utils/format"
 import { normalizeApiConfiguration } from "../settings/ApiOptions"
+import ModelUsageBreakdown from "../history/ModelUsageBreakdown"
+
+import { ModelChange } from "../../../../src/shared/model-tracking"
 
 interface TaskHeaderProps {
         task: ClineMessage
@@ -17,6 +20,7 @@ interface TaskHeaderProps {
         cacheWrites?: number
         cacheReads?: number
         totalCost: number
+        modelChanges?: ModelChange[]
         onClose: () => void
 }
 
@@ -28,10 +32,12 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
         cacheWrites,
         cacheReads,
         totalCost,
+        modelChanges,
         onClose,
 }) => {
         const { apiConfiguration } = useExtensionState()
         const [isTaskExpanded, setIsTaskExpanded] = useState(true)
+        const [isModelUsageExpanded, setIsModelUsageExpanded] = useState(false)
         const [isTextExpanded, setIsTextExpanded] = useState(false)
         const [showSeeMore, setShowSeeMore] = useState(false)
         const textContainerRef = useRef<HTMLDivElement>(null)
@@ -308,10 +314,31 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
                                                         <div style={{ 
                                                                 display: "flex", 
                                                                 gap: "8px",
-                                                                marginLeft: "auto"
+                                                                marginLeft: "auto",
+                                                                alignItems: "center"
                                                         }}>
+                                                                {modelChanges && modelChanges.length > 1 && (
+                                                                        <div
+                                                                                onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setIsModelUsageExpanded(!isModelUsageExpanded);
+                                                                                }}
+                                                                                style={{
+                                                                                        cursor: "pointer",
+                                                                                        display: "flex",
+                                                                                        alignItems: "center",
+                                                                                        gap: "4px",
+                                                                                        color: "var(--vscode-textLink-foreground)",
+                                                                                }}>
+                                                                                <span className={`codicon codicon-chevron-${isModelUsageExpanded ? "down" : "right"}`}></span>
+                                                                                <span>Per Model Usage</span>
+                                                                        </div>
+                                                                )}
                                                                 <ExportButton />
                                                         </div>
+                                                        )}
+                                                        {isModelUsageExpanded && modelChanges && (
+                                                                <ModelUsageBreakdown modelChanges={modelChanges} />
                                                         )}
                                                 </div>
                                         </>

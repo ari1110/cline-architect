@@ -45,6 +45,19 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
         const modifiedMessages = useMemo(() => combineApiRequests(combineCommandSequences(messages.slice(1))), [messages])
         // has to be after api_req_finished are all reduced into api_req_started messages
         const apiMetrics = useMemo(() => getApiMetrics(modifiedMessages), [modifiedMessages])
+        
+        // added const as a reference from taskheader and model-tracking to track model information (i.e., tokens, cost, cache, etc., similar to the history views)
+        const modelChanges = useMemo(() => {
+                const apiReqMessage = findLast(modifiedMessages, m => m.say === "api_req_started" && m.text !== undefined);
+                if (apiReqMessage?.text) {
+                        try {
+                                return JSON.parse(apiReqMessage.text).modelChanges;
+                        } catch (e) {
+                                return undefined;
+                        }
+                }
+                return undefined;
+        }, [modifiedMessages])
 
         const [inputValue, setInputValue] = useState("")
         const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -735,6 +748,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                         cacheWrites={apiMetrics.totalCacheWrites}
                                         cacheReads={apiMetrics.totalCacheReads}
                                         totalCost={apiMetrics.totalCost}
+                                        modelChanges={modelChanges}
                                         onClose={handleTaskCloseButtonClick}
                                 />
                         ) : (
