@@ -20,6 +20,7 @@ export interface ExtensionMessage {
 		| "openRouterModels"
 		| "mcpServers"
 		| "debug_log"
+		| "customInstructionsEnabled"
 	text?: string
 	action?:
 		| "chatButtonClicked"
@@ -36,12 +37,14 @@ export interface ExtensionMessage {
 	partialMessage?: ClineMessage
 	openRouterModels?: Record<string, ModelInfo>
 	mcpServers?: McpServer[]
+	enabled?: boolean
 }
 
 export interface ExtensionState {
 	version: string
 	apiConfiguration?: ApiConfiguration
 	customInstructions?: string
+	customInstructionsEnabled: boolean
 	uriScheme?: string
 	clineMessages: ClineMessage[]
 	taskHistory: HistoryItem[]

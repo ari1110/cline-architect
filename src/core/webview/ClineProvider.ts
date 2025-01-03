@@ -60,6 +60,7 @@ type GlobalStateKey =
         | "openRouterModelId"
         | "openRouterModelInfo"
         | "autoApprovalSettings"
+        | "customInstructionsEnabled"
 
 export const GlobalFileNames = {
         apiConversationHistory: "api_conversation_history.json",
@@ -415,7 +416,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                                                 await this.postStateToWebview()
                                                 break
                                         case "customInstructions":
-                                                await this.updateCustomInstructions(message.text)
+                                                await this.updateCustomInstructions(message.text, message.bool)
                                                 break
                                         case "autoApprovalSettings":
                                                 if (message.autoApprovalSettings) {
@@ -522,11 +523,14 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                 )
         }
 
-        async updateCustomInstructions(instructions?: string) {
+        async updateCustomInstructions(instructions?: string, enabled?: boolean) {
                 // User may be clearing the field
                 await this.updateGlobalState("customInstructions", instructions || undefined)
+                if (enabled !== undefined) {
+                    await this.updateGlobalState("customInstructionsEnabled", enabled)
+                }
                 if (this.cline) {
-                        this.cline.customInstructions = instructions || undefined
+                    this.cline.customInstructions = instructions || undefined
                 }
                 await this.postStateToWebview()
         }
@@ -830,7 +834,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
         }
 
         async getStateToPostToWebview() {
-                const { apiConfiguration, lastShownAnnouncementId, customInstructions, taskHistory, autoApprovalSettings } =
+                const { apiConfiguration, lastShownAnnouncementId, customInstructions, taskHistory, autoApprovalSettings, customInstructionsEnabled } =
                         await this.getState()
                 return {
                         version: this.context.extension?.packageJSON?.version ?? "",
@@ -841,6 +845,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                         taskHistory: (taskHistory || []).filter((item) => item.ts && item.task).sort((a, b) => b.ts - a.ts),
                         shouldShowAnnouncement: lastShownAnnouncementId !== this.latestAnnouncementId,
                         autoApprovalSettings,
+                        customInstructionsEnabled,
                 }
         }
 
@@ -925,6 +930,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                         customInstructions,
                         taskHistory,
                         autoApprovalSettings,
+                        customInstructionsEnabled,
                 ] = await Promise.all([
                         this.getGlobalState("apiProvider") as Promise<ApiProvider | undefined>,
                         this.getGlobalState("apiModelId") as Promise<string | undefined>,
@@ -954,6 +960,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                         this.getGlobalState("customInstructions") as Promise<string | undefined>,
                         this.getGlobalState("taskHistory") as Promise<HistoryItem[] | undefined>,
                         this.getGlobalState("autoApprovalSettings") as Promise<AutoApprovalSettings | undefined>,
+                        this.getGlobalState("customInstructionsEnabled") as Promise<boolean | undefined>,
                 ])
 
                 let apiProvider: ApiProvider
@@ -1001,6 +1008,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                         customInstructions,
                         taskHistory,
                         autoApprovalSettings: autoApprovalSettings || DEFAULT_AUTO_APPROVAL_SETTINGS, // default value can be 0 or empty string
+                        customInstructionsEnabled: customInstructionsEnabled ?? false,
                 }
         }
 

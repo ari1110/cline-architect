@@ -26,6 +26,7 @@ import ChatTextArea from "./ChatTextArea"
 import TaskHeader from "./TaskHeader"
 import ModelIdentifier from "./ModelIdentifier"
 import AutoApproveMenu from "./AutoApproveMenu"
+import CustomInstructionsMenu from "./CustomInstructionsMenu"
 
 interface ChatViewProps {
         isHidden: boolean
@@ -784,13 +785,22 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                         //    but becomes scrollable when the viewport is too small
                         */}
                         {!task && (
-                                <AutoApproveMenu
-                                        style={{
-                                                marginBottom: -2,
-                                                flex: "0 1 auto", // flex-grow: 0, flex-shrink: 1, flex-basis: auto
-                                                minHeight: 0,
-                                        }}
-                                />
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                        <AutoApproveMenu
+                                                style={{
+                                                        marginBottom: -2,
+                                                        flex: "0 1 auto", // flex-grow: 0, flex-shrink: 1, flex-basis: auto
+                                                        minHeight: 0,
+                                                }}
+                                        />
+                                        <CustomInstructionsMenu
+                                                style={{
+                                                        marginBottom: -2,
+                                                        flex: "0 1 auto",
+                                                        minHeight: 0,
+                                                }}
+                                        />
+                                </div>
                         )}
 
                         {task && (
@@ -822,7 +832,10 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                                         initialTopMostItemIndex={groupedMessages.length - 1}
                                                 />
                                         </div>
-                                        <AutoApproveMenu />
+                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                <AutoApproveMenu />
+                                                <CustomInstructionsMenu />
+                                        </div>
                                         {showScrollToBottom ? (
                                                 <div
                                                         style={{
