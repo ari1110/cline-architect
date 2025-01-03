@@ -4,7 +4,7 @@ import { vscode } from "../../utils/vscode"
 import { memo } from "react"
 import { StaticModelIdentifier } from "../chat/StaticModelIdentifier"
 import { formatLargeNumber } from "../../utils/format"
-import { ModelChange } from "../../../../src/shared/model-tracking"
+import ModelUsageBreakdown from "./ModelUsageBreakdown"
 
 type HistoryPreviewProps = {
 	showHistoryView: () => void
@@ -131,24 +131,12 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 												)}
 												<span>Total: ${item.totalCost?.toFixed(4)}</span>
 											</div>
-											{item.modelChanges?.map((change: ModelChange) => change.usage && (
-												<div 
-													key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}
-													style={{ 
-														marginTop: 4,
-														padding: "2px 6px",
-														backgroundColor: "var(--vscode-textBlockQuote-background)",
-														borderRadius: 3,
-														display: "flex",
-														justifyContent: "space-between",
-														alignItems: "center"
-													}}>
-													<span style={{ fontWeight: 500 }}>
-														{change.modelProvider}/{change.modelId}
-													</span>
-													<span>${change.usage.cost.toFixed(4)}</span>
-												</div>
-											))}
+											<div style={{ marginTop: 4 }}>
+												<ModelUsageBreakdown 
+													modelChanges={item.modelChanges || []} 
+													compact={true}
+												/>
+											</div>
 										</>
 									)}
 								</div>

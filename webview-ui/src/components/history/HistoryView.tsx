@@ -6,7 +6,7 @@ import { memo, useMemo, useState, useEffect } from "react"
 import { StaticModelIdentifier } from "../chat/StaticModelIdentifier"
 import Fuse, { FuseResult } from "fuse.js"
 import { formatLargeNumber } from "../../utils/format"
-import { ModelChange } from "../../../../src/shared/model-tracking"
+import ModelUsageBreakdown from "./ModelUsageBreakdown"
 
 type HistoryViewProps = {
         onDone: () => void
@@ -433,50 +433,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
                                                                                                         </div>
                                                                                                 </div>
                                                                                                 {expandedItems[item.id] && (
-                                                                                                <div style={{ 
-                                                                                                        marginTop: 8,
-                                                                                                        paddingTop: 8,
-                                                                                                        borderTop: '1px solid var(--vscode-textBlockQuote-border)'
-                                                                                                }}>
-                                                                                                        {item.modelChanges?.map((change: ModelChange) => change.usage && (
-                                                                                                        <div 
-                                                                                                                key={`${change.modelProvider}-${change.modelId}-${change.startTs}`}
-                                                                                                                style={{ 
-                                                                                                                        marginTop: 4,
-                                                                                                                        padding: "6px 10px",
-                                                                                                                        backgroundColor: "var(--vscode-textBlockQuote-background)",
-                                                                                                                        borderRadius: 3,
-                                                                                                                        fontSize: "0.85em",
-                                                                                                                        border: "1px solid var(--vscode-textBlockQuote-border)"
-                                                                                                                }}>
-                                                                                                                <div style={{ 
-                                                                                                                        display: "flex", 
-                                                                                                                        justifyContent: "space-between",
-                                                                                                                        marginBottom: 2
-                                                                                                                }}>
-                                                                                                                        <span style={{ 
-                                                                                                                                fontWeight: 600,
-                                                                                                                                color: 'var(--vscode-textLink-foreground)',
-                                                                                                                                opacity: 0.8
-                                                                                                                        }}>
-                                                                                                                                {change.modelProvider}/{change.modelId}
-                                                                                                                        </span>
-                                                                                                                        <span style={{ fontWeight: 500 }}>${change.usage.cost.toFixed(4)}</span>
-                                                                                                                </div>
-                                                                                                                <div style={{ 
-                                                                                                                        display: "flex", 
-                                                                                                                        gap: 12, 
-                                                                                                                        opacity: 0.7,
-                                                                                                                        marginTop: 4
-                                                                                                                }}>
-                                                                                                                        <span>↑{formatLargeNumber(change.usage.tokensIn)} ↓{formatLargeNumber(change.usage.tokensOut)}</span>
-                                                                                                                        {!!change.usage.cacheWrites && (
-                                                                                                                                <span>Cache: +{formatLargeNumber(change.usage.cacheWrites)} → {formatLargeNumber(change.usage.cacheReads || 0)}</span>
-                                                                                                                        )}
-                                                                                                                </div>
-                                                                                                        </div>
-                                                                                                ))}
-                                                                                                </div>
+                                                                                                <ModelUsageBreakdown modelChanges={item.modelChanges} />
                                                                                         )}
                                                                                         </>
                                                                                 )}
