@@ -723,22 +723,20 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
                                 flexDirection: "column",
                                 overflow: "hidden",
                         }}>
+                        <div style={{ padding: "10px 13px 0 13px" }}>
+                                <ModelIdentifier />
+                        </div>
                         {task ? (
-                                <>
-                                        <div style={{ padding: "10px 13px 0 13px" }}>
-                                                <ModelIdentifier />
-                                        </div>
-                                        <TaskHeader
-                                                task={task}
-                                                tokensIn={apiMetrics.totalTokensIn}
-                                                tokensOut={apiMetrics.totalTokensOut}
-                                                doesModelSupportPromptCache={selectedModelInfo.supportsPromptCache}
-                                                cacheWrites={apiMetrics.totalCacheWrites}
-                                                cacheReads={apiMetrics.totalCacheReads}
-                                                totalCost={apiMetrics.totalCost}
-                                                onClose={handleTaskCloseButtonClick}
-                                        />
-                                </>
+                                <TaskHeader
+                                        task={task}
+                                        tokensIn={apiMetrics.totalTokensIn}
+                                        tokensOut={apiMetrics.totalTokensOut}
+                                        doesModelSupportPromptCache={selectedModelInfo.supportsPromptCache}
+                                        cacheWrites={apiMetrics.totalCacheWrites}
+                                        cacheReads={apiMetrics.totalCacheReads}
+                                        totalCost={apiMetrics.totalCost}
+                                        onClose={handleTaskCloseButtonClick}
+                                />
                         ) : (
                                 <div
                                         style={{
