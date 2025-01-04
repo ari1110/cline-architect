@@ -31,15 +31,15 @@ https://github.com/KumarVariable/vscode-extension-sidebar-html/blob/master/src/c
 */
 
 type SecretKey =
-	| "apiKey"
-	| "openRouterApiKey"
-	| "awsAccessKey"
-	| "awsSecretKey"
-	| "awsSessionToken"
-	| "openAiApiKey"
-	| "geminiApiKey"
-	| "openAiNativeApiKey"
-	| "deepSeekApiKey"
+        | "apiKey"
+        | "openRouterApiKey"
+        | "awsAccessKey"
+        | "awsSecretKey"
+        | "awsSessionToken"
+        | "openAiApiKey"
+        | "geminiApiKey"
+        | "openAiNativeApiKey"
+        | "deepSeekApiKey"
 type GlobalStateKey =
         | "apiProvider"
         | "apiModelId"
