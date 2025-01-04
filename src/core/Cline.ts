@@ -51,7 +51,9 @@ import { addUserInstructions, SYSTEM_PROMPT } from "./prompts/system"
 import { truncateHalfConversation } from "./sliding-window"
 import { ClineProvider, GlobalFileNames } from "./webview/ClineProvider"
 import { showSystemNotification } from "../integrations/notifications"
-import { ConfigurationTarget } from "vscode"
+import { removeInvalidChars } from "../utils/string"
+import { fixModelHtmlEscaping } from "../utils/string"
+import { OpenAiHandler } from "../api/providers/openai"
 
 const cwd =
         vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop") // may or may not exist but fs checking existence would immediately ask for permission which would be bad UX, need to come up with a better solution
@@ -840,22 +842,40 @@ export class Cline {
                         systemPrompt += addUserInstructions(settingsCustomInstructions, clineRulesFileInstructions)
                 }
 
-                // If the previous API request's total token usage is close to the context window, truncate the conversation history to free up space for the new request
-                if (previousApiReqIndex >= 0) {
-                        const previousRequest = this.clineMessages[previousApiReqIndex]
-                        if (previousRequest && previousRequest.text) {
-                                const { tokensIn, tokensOut, cacheWrites, cacheReads }: ClineApiReqInfo = JSON.parse(
-                                        previousRequest.text,
-                                )
-                                const totalTokens = (tokensIn || 0) + (tokensOut || 0) + (cacheWrites || 0) + (cacheReads || 0)
-                                const contextWindow = this.api.getModel().info.contextWindow || 128_000
-                                const maxAllowedSize = Math.max(contextWindow - 40_000, contextWindow * 0.8)
-                                if (totalTokens >= maxAllowedSize) {
-                                        const truncatedMessages = truncateHalfConversation(this.apiConversationHistory)
-                                        await this.overwriteApiConversationHistory(truncatedMessages)
-                                }
-                        }
-                }
+		// If the previous API request's total token usage is close to the context window, truncate the conversation history to free up space for the new request
+		if (previousApiReqIndex >= 0) {
+			const previousRequest = this.clineMessages[previousApiReqIndex]
+			if (previousRequest && previousRequest.text) {
+				const { tokensIn, tokensOut, cacheWrites, cacheReads }: ClineApiReqInfo = JSON.parse(
+					previousRequest.text,
+				)
+				const totalTokens = (tokensIn || 0) + (tokensOut || 0) + (cacheWrites || 0) + (cacheReads || 0)
+				let contextWindow = this.api.getModel().info.contextWindow || 128_000
+				// FIXME: hack to get anyone using openai compatible with deepseek to have the proper context window instead of the default 128k. We need a way for the user to specify the context window for models they input through openai compatible
+				if (this.api instanceof OpenAiHandler && this.api.getModel().id.toLowerCase().includes("deepseek")) {
+					contextWindow = 64_000
+				}
+				let maxAllowedSize: number
+				switch (contextWindow) {
+					case 64_000: // deepseek models
+						maxAllowedSize = contextWindow - 27_000
+						break
+					case 128_000: // most models
+						maxAllowedSize = contextWindow - 30_000
+						break
+					case 200_000: // claude models
+						maxAllowedSize = contextWindow - 40_000
+						break
+					default:
+						maxAllowedSize = Math.max(contextWindow - 40_000, contextWindow * 0.8) // for deepseek, 80% of 64k meant only ~10k buffer which was too small and resulted in users getting context window errors.
+				}
+
+				if (totalTokens >= maxAllowedSize) {
+					const truncatedMessages = truncateHalfConversation(this.apiConversationHistory)
+					await this.overwriteApiConversationHistory(truncatedMessages)
+				}
+			}
+		}
 
                 const stream = this.api.createMessage(systemPrompt, this.apiConversationHistory)
                 const iterator = stream[Symbol.asyncIterator]()
@@ -1146,60 +1166,57 @@ export class Cline {
                                                         this.diffViewProvider.editType = fileExists ? "modify" : "create"
                                                 }
 
-                                                try {
-                                                        // Construct newContent from diff
-                                                        let newContent: string
-                                                        if (diff) {
-                                                                try {
-                                                                        newContent = await constructNewFileContent(
-                                                                                diff,
-                                                                                this.diffViewProvider.originalContent || "",
-                                                                                !block.partial,
-                                                                        )
-                                                                } catch (error) {
-                                                                        await this.say("diff_error", relPath)
-                                                                        pushToolResult(
-                                                                                formatResponse.toolError(
-                                                                                        `${(error as Error)?.message}\n\n` +
-                                                                                                `This is likely because the SEARCH block content doesn't match exactly with what's in the file.\n\n` +
-                                                                                                `The file was reverted to its original state:\n\n` +
-                                                                                                `<file_content path="${relPath.toPosix()}">\n${this.diffViewProvider.originalContent}\n</file_content>\n\n` +
-                                                                                                `Try again with a more precise SEARCH block.\n(If you keep running into this error, you may use the write_to_file tool as a workaround.)`,
-                                                                                ),
-                                                                        )
-                                                                        await this.diffViewProvider.revertChanges()
-                                                                        await this.diffViewProvider.reset()
-                                                                        break
-                                                                }
-                                                        } else if (content) {
-                                                                newContent = content
+						try {
+							// Construct newContent from diff
+							let newContent: string
+							if (diff) {
+								if (!this.api.getModel().id.includes("claude")) {
+									// deepseek models tend to use unescaped html entities in diffs
+									diff = fixModelHtmlEscaping(diff)
+									diff = removeInvalidChars(diff)
+								}
+								try {
+									newContent = await constructNewFileContent(
+										diff,
+										this.diffViewProvider.originalContent || "",
+										!block.partial,
+									)
+								} catch (error) {
+									await this.say("diff_error", relPath)
+									pushToolResult(
+										formatResponse.toolError(
+											`${(error as Error)?.message}\n\n` +
+												`This is likely because the SEARCH block content doesn't match exactly with what's in the file, or if you used multiple SEARCH/REPLACE blocks they may not have been in the order they appear in the file.\n\n` +
+												`The file was reverted to its original state:\n\n` +
+												`<file_content path="${relPath.toPosix()}">\n${this.diffViewProvider.originalContent}\n</file_content>\n\n` +
+												`Try again with a more precise SEARCH block.\n(If you keep running into this error, you may use the write_to_file tool as a workaround.)`,
+										),
+									)
+									await this.diffViewProvider.revertChanges()
+									await this.diffViewProvider.reset()
+									break
+								}
+							} else if (content) {
+								newContent = content
 
-                                                                // pre-processing newContent for cases where weaker models might add artifacts like markdown codeblock markers (deepseek/llama) or extra escape characters (gemini)
-                                                                if (newContent.startsWith("```")) {
-                                                                        // this handles cases where it includes language specifiers like ```python ```js
-                                                                        newContent = newContent.split("\n").slice(1).join("\n").trim()
-                                                                }
-                                                                if (newContent.endsWith("```")) {
-                                                                        newContent = newContent.split("\n").slice(0, -1).join("\n").trim()
-                                                                }
-                                                        } else {
-                                                                // can't happen, since we already checked for content/diff above. but need to do this for type error
-                                                                break
-                                                        }
+								// pre-processing newContent for cases where weaker models might add artifacts like markdown codeblock markers (deepseek/llama) or extra escape characters (gemini)
+								if (newContent.startsWith("```")) {
+									// this handles cases where it includes language specifiers like ```python ```js
+									newContent = newContent.split("\n").slice(1).join("\n").trim()
+								}
+								if (newContent.endsWith("```")) {
+									newContent = newContent.split("\n").slice(0, -1).join("\n").trim()
+								}
 
-                                                        if (!this.api.getModel().id.includes("claude")) {
-                                                                // it seems not just llama models are doing this, but also gemini and potentially others
-                                                                if (
-                                                                        newContent.includes("&gt;") ||
-                                                                        newContent.includes("&lt;") ||
-                                                                        newContent.includes("&quot;")
-                                                                ) {
-                                                                        newContent = newContent
-                                                                                .replace(/&gt;/g, ">")
-                                                                                .replace(/&lt;/g, "<")
-                                                                                .replace(/&quot;/g, '"')
-                                                                }
-                                                        }
+								if (!this.api.getModel().id.includes("claude")) {
+									// it seems not just llama models are doing this, but also gemini and potentially others
+									newContent = fixModelHtmlEscaping(newContent)
+									newContent = removeInvalidChars(newContent)
+								}
+							} else {
+								// can't happen, since we already checked for content/diff above. but need to do this for type error
+								break
+							}
 
                                                         newContent = newContent.trimEnd() // remove any trailing newlines, since it's automatically inserted by the editor
 
@@ -1278,313 +1295,345 @@ export class Cline {
                                                                         await this.say("tool", completeMessage, undefined, false)
                                                                         this.consecutiveAutoApprovedRequestsCount++
 
-                                                                        // we need an artificial delay to let the diagnostics catch up to the changes
-                                                                        await delay(3_500)
-                                                                } else {
-                                                                        // If auto-approval is enabled but this tool wasn't auto-approved, send notification
-                                                                        showNotificationForApprovalIfAutoApprovalEnabled(
-                                                                                `Cline wants to ${fileExists ? "edit" : "create"} ${path.basename(relPath)}`,
-                                                                        )
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        const didApprove = await askApproval("tool", completeMessage)
-                                                                        if (!didApprove) {
-                                                                                await this.diffViewProvider.revertChanges()
-                                                                                break
-                                                                        }
-                                                                }
+									// we need an artificial delay to let the diagnostics catch up to the changes
+									await delay(3_500)
+								} else {
+									// If auto-approval is enabled but this tool wasn't auto-approved, send notification
+									showNotificationForApprovalIfAutoApprovalEnabled(
+										`Cline wants to ${fileExists ? "edit" : "create"} ${path.basename(relPath)}`,
+									)
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									// const didApprove = await askApproval("tool", completeMessage)
 
-                                                                const { newProblemsMessage, userEdits, finalContent } =
-                                                                        await this.diffViewProvider.saveChanges()
-                                                                this.didEditFile = true // used to determine if we should wait for busy terminal to update before sending api request
-                                                                if (userEdits) {
-                                                                        await this.say(
-                                                                                "user_feedback_diff",
-                                                                                JSON.stringify({
-                                                                                        tool: fileExists ? "editedExistingFile" : "newFileCreated",
-                                                                                        path: getReadablePath(cwd, relPath),
-                                                                                        diff: userEdits,
-                                                                                } satisfies ClineSayTool),
-                                                                        )
-                                                                        pushToolResult(
-                                                                                `The user made the following updates to your content:\n\n${userEdits}\n\n` +
-                                                                                        `The updated content, which includes both your original modifications and the user's edits, has been successfully saved to ${relPath.toPosix()}. Here is the full, updated content of the file:\n\n` +
-                                                                                        `<final_file_content path="${relPath.toPosix()}">\n${finalContent}\n</final_file_content>\n\n` +
-                                                                                        `Please note:\n` +
-                                                                                        `1. You do not need to re-write the file with these changes, as they have already been applied.\n` +
-                                                                                        `2. Proceed with the task using this updated file content as the new baseline.\n` +
-                                                                                        `3. If the user's edits have addressed part of the task or changed the requirements, adjust your approach accordingly.` +
-                                                                                        `4. If you need to make further changes to this file, use this final_file_content as the new reference for your SEARCH/REPLACE operations, as it is now the current state of the file (including the user's edits and any auto-formatting done by the system).\n` +
-                                                                                        `${newProblemsMessage}`,
-                                                                        )
-                                                                } else {
-                                                                        pushToolResult(
-                                                                                `The content was successfully saved to ${relPath.toPosix()}.\n\n` +
-                                                                                        `Here is the full, updated content of the file:\n\n` +
-                                                                                        `<final_file_content path="${relPath.toPosix()}">\n${finalContent}\n</final_file_content>\n\n` +
-                                                                                        `Please note: If you need to make further changes to this file, use this final_file_content as the new reference for your SEARCH/REPLACE operations, as it is now the current state of the file (including any auto-formatting done by the system).\n\n` +
-                                                                                        `${newProblemsMessage}`,
-                                                                        )
-                                                                }
-                                                                await this.diffViewProvider.reset()
-                                                                break
-                                                        }
-                                                } catch (error) {
-                                                        await handleError("writing file", error)
-                                                        await this.diffViewProvider.revertChanges()
-                                                        await this.diffViewProvider.reset()
-                                                        break
-                                                }
-                                        }
-                                        case "read_file": {
-                                                const relPath: string | undefined = block.params.path
-                                                const sharedMessageProps: ClineSayTool = {
-                                                        tool: "readFile",
-                                                        path: getReadablePath(cwd, removeClosingTag("path", relPath)),
-                                                }
-                                                try {
-                                                        if (block.partial) {
-                                                                const partialMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: undefined,
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", partialMessage, undefined, block.partial)
-                                                                } else {
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        await this.ask("tool", partialMessage, block.partial).catch(() => {})
-                                                                }
-                                                                break
-                                                        } else {
-                                                                if (!relPath) {
-                                                                        this.consecutiveMistakeCount++
-                                                                        pushToolResult(await this.sayAndCreateMissingParamError("read_file", "path"))
-                                                                        break
-                                                                }
-                                                                this.consecutiveMistakeCount = 0
-                                                                const absolutePath = path.resolve(cwd, relPath)
-                                                                const completeMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: absolutePath,
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", completeMessage, undefined, false) // need to be sending partialValue bool, since undefined has its own purpose in that the message is treated neither as a partial or completion of a partial, but as a single complete message
-                                                                        this.consecutiveAutoApprovedRequestsCount++
-                                                                } else {
-                                                                        showNotificationForApprovalIfAutoApprovalEnabled(
-                                                                                `Cline wants to read ${path.basename(absolutePath)}`,
-                                                                        )
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        const didApprove = await askApproval("tool", completeMessage)
-                                                                        if (!didApprove) {
-                                                                                break
-                                                                        }
-                                                                }
-                                                                // now execute the tool like normal
-                                                                const content = await extractTextFromFile(absolutePath)
-                                                                pushToolResult(content)
-                                                                break
-                                                        }
-                                                } catch (error) {
-                                                        await handleError("reading file", error)
-                                                        break
-                                                }
-                                        }
-                                        case "list_files": {
-                                                const relDirPath: string | undefined = block.params.path
-                                                const recursiveRaw: string | undefined = block.params.recursive
-                                                const recursive = recursiveRaw?.toLowerCase() === "true"
-                                                const sharedMessageProps: ClineSayTool = {
-                                                        tool: !recursive ? "listFilesTopLevel" : "listFilesRecursive",
-                                                        path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
-                                                }
-                                                try {
-                                                        if (block.partial) {
-                                                                const partialMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: "",
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", partialMessage, undefined, block.partial)
-                                                                } else {
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        await this.ask("tool", partialMessage, block.partial).catch(() => {})
-                                                                }
-                                                                break
-                                                        } else {
-                                                                if (!relDirPath) {
-                                                                        this.consecutiveMistakeCount++
-                                                                        pushToolResult(await this.sayAndCreateMissingParamError("list_files", "path"))
-                                                                        break
-                                                                }
-                                                                this.consecutiveMistakeCount = 0
-                                                                const absolutePath = path.resolve(cwd, relDirPath)
-                                                                const [files, didHitLimit] = await listFiles(absolutePath, recursive, 200)
-                                                                const result = formatResponse.formatFilesList(absolutePath, files, didHitLimit)
-                                                                const completeMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: result,
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", completeMessage, undefined, false)
-                                                                        this.consecutiveAutoApprovedRequestsCount++
-                                                                } else {
-                                                                        showNotificationForApprovalIfAutoApprovalEnabled(
-                                                                                `Cline wants to view directory ${path.basename(absolutePath)}/`,
-                                                                        )
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        const didApprove = await askApproval("tool", completeMessage)
-                                                                        if (!didApprove) {
-                                                                                break
-                                                                        }
-                                                                }
-                                                                pushToolResult(result)
-                                                                break
-                                                        }
-                                                } catch (error) {
-                                                        await handleError("listing files", error)
-                                                        break
-                                                }
-                                        }
-                                        case "list_code_definition_names": {
-                                                const relDirPath: string | undefined = block.params.path
-                                                const sharedMessageProps: ClineSayTool = {
-                                                        tool: "listCodeDefinitionNames",
-                                                        path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
-                                                }
-                                                try {
-                                                        if (block.partial) {
-                                                                const partialMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: "",
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", partialMessage, undefined, block.partial)
-                                                                } else {
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        await this.ask("tool", partialMessage, block.partial).catch(() => {})
-                                                                }
-                                                                break
-                                                        } else {
-                                                                if (!relDirPath) {
-                                                                        this.consecutiveMistakeCount++
-                                                                        pushToolResult(
-                                                                                await this.sayAndCreateMissingParamError("list_code_definition_names", "path"),
-                                                                        )
-                                                                        break
-                                                                }
-                                                                this.consecutiveMistakeCount = 0
-                                                                const absolutePath = path.resolve(cwd, relDirPath)
-                                                                const result = await parseSourceCodeForDefinitionsTopLevel(absolutePath)
-                                                                const completeMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: result,
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", completeMessage, undefined, false)
-                                                                        this.consecutiveAutoApprovedRequestsCount++
-                                                                } else {
-                                                                        showNotificationForApprovalIfAutoApprovalEnabled(
-                                                                                `Cline wants to view source code definitions in ${path.basename(absolutePath)}/`,
-                                                                        )
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        const didApprove = await askApproval("tool", completeMessage)
-                                                                        if (!didApprove) {
-                                                                                break
-                                                                        }
-                                                                }
-                                                                pushToolResult(result)
-                                                                break
-                                                        }
-                                                } catch (error) {
-                                                        await handleError("parsing source code definitions", error)
-                                                        break
-                                                }
-                                        }
-                                        case "search_files": {
-                                                const relDirPath: string | undefined = block.params.path
-                                                const regex: string | undefined = block.params.regex
-                                                const filePattern: string | undefined = block.params.file_pattern
-                                                const sharedMessageProps: ClineSayTool = {
-                                                        tool: "searchFiles",
-                                                        path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
-                                                        regex: removeClosingTag("regex", regex),
-                                                        filePattern: removeClosingTag("file_pattern", filePattern),
-                                                }
-                                                try {
-                                                        if (block.partial) {
-                                                                const partialMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: "",
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", partialMessage, undefined, block.partial)
-                                                                } else {
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        await this.ask("tool", partialMessage, block.partial).catch(() => {})
-                                                                }
-                                                                break
-                                                        } else {
-                                                                if (!relDirPath) {
-                                                                        this.consecutiveMistakeCount++
-                                                                        pushToolResult(await this.sayAndCreateMissingParamError("search_files", "path"))
-                                                                        break
-                                                                }
-                                                                if (!regex) {
-                                                                        this.consecutiveMistakeCount++
-                                                                        pushToolResult(await this.sayAndCreateMissingParamError("search_files", "regex"))
-                                                                        break
-                                                                }
-                                                                this.consecutiveMistakeCount = 0
-                                                                const absolutePath = path.resolve(cwd, relDirPath)
-                                                                const results = await regexSearchFiles(cwd, absolutePath, regex, filePattern)
-                                                                const completeMessage = JSON.stringify({
-                                                                        ...sharedMessageProps,
-                                                                        content: results,
-                                                                } satisfies ClineSayTool)
-                                                                if (this.shouldAutoApproveTool(block.name)) {
-                                                                        this.removeLastPartialMessageIfExistsWithType("ask", "tool")
-                                                                        await this.say("tool", completeMessage, undefined, false)
-                                                                        this.consecutiveAutoApprovedRequestsCount++
-                                                                } else {
-                                                                        showNotificationForApprovalIfAutoApprovalEnabled(
-                                                                                `Cline wants to search files in ${path.basename(absolutePath)}/`,
-                                                                        )
-                                                                        this.removeLastPartialMessageIfExistsWithType("say", "tool")
-                                                                        const didApprove = await askApproval("tool", completeMessage)
-                                                                        if (!didApprove) {
-                                                                                break
-                                                                        }
-                                                                }
-                                                                pushToolResult(results)
-                                                                break
-                                                        }
-                                                } catch (error) {
-                                                        await handleError("searching files", error)
-                                                        break
-                                                }
-                                        }
-                                        case "browser_action": {
-                                                const action: BrowserAction | undefined = block.params.action as BrowserAction
-                                                const url: string | undefined = block.params.url
-                                                const coordinate: string | undefined = block.params.coordinate
-                                                const text: string | undefined = block.params.text
-                                                if (!action || !browserActions.includes(action)) {
-                                                        // checking for action to ensure it is complete and valid
-                                                        if (!block.partial) {
-                                                                // if the block is complete and we don't have a valid action this is a mistake
-                                                                this.consecutiveMistakeCount++
-                                                                pushToolResult(await this.sayAndCreateMissingParamError("browser_action", "action"))
-                                                                await this.browserSession.closeBrowser()
-                                                        }
-                                                        break
-                                                }
+									// Need a more customized tool response for file edits to highlight the fact that the file was not updated (particularly important for deepseek)
+									let didApprove = true
+									const { response, text, images } = await this.ask("tool", completeMessage, false)
+									if (response !== "yesButtonClicked") {
+										// TODO: add similar context for other tool denial responses, to emphasize ie that a command was not run
+										const fileDeniedNote = fileExists
+											? "The file was not updated, and maintains its original contents."
+											: "The file was not created."
+										if (response === "messageResponse") {
+											await this.say("user_feedback", text, images)
+											pushToolResult(
+												formatResponse.toolResult(
+													`The user denied this operation. ${fileDeniedNote}\nThe user provided the following feedback:\n<feedback>\n${text}\n</feedback>`,
+													images,
+												),
+											)
+											this.didRejectTool = true
+											didApprove = false
+										} else {
+											pushToolResult(`The user denied this operation. ${fileDeniedNote}`)
+											this.didRejectTool = true
+											didApprove = false
+										}
+									}
+
+									if (!didApprove) {
+										await this.diffViewProvider.revertChanges()
+										break
+									}
+								}
+
+								const { newProblemsMessage, userEdits, autoFormattingEdits, finalContent } =
+									await this.diffViewProvider.saveChanges()
+								this.didEditFile = true // used to determine if we should wait for busy terminal to update before sending api request
+								if (userEdits) {
+									await this.say(
+										"user_feedback_diff",
+										JSON.stringify({
+											tool: fileExists ? "editedExistingFile" : "newFileCreated",
+											path: getReadablePath(cwd, relPath),
+											diff: userEdits,
+										} satisfies ClineSayTool),
+									)
+									pushToolResult(
+										`The user made the following updates to your content:\n\n${userEdits}\n\n` +
+											(autoFormattingEdits
+												? `The user's editor also applied the following auto-formatting to your content:\n\n${autoFormattingEdits}\n\n(Note: Pay close attention to changes such as single quotes being converted to double quotes, semicolons being removed or added, long lines being broken into multiple lines, adjusting indentation style, adding/removing trailing commas, etc. This will help you ensure future SEARCH/REPLACE operations to this file are accurate.)\n\n`
+												: "") +
+											`The updated content, which includes both your original modifications and the additional edits, has been successfully saved to ${relPath.toPosix()}. Here is the full, updated content of the file that was saved:\n\n` +
+											`<final_file_content path="${relPath.toPosix()}">\n${finalContent}\n</final_file_content>\n\n` +
+											`Please note:\n` +
+											`1. You do not need to re-write the file with these changes, as they have already been applied.\n` +
+											`2. Proceed with the task using this updated file content as the new baseline.\n` +
+											`3. If the user's edits have addressed part of the task or changed the requirements, adjust your approach accordingly.` +
+											`4. IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including both user edits and any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.\n` +
+											`${newProblemsMessage}`,
+									)
+								} else {
+									pushToolResult(
+										`The content was successfully saved to ${relPath.toPosix()}.\n\n` +
+											(autoFormattingEdits
+												? `Along with your edits, the user's editor applied the following auto-formatting to your content:\n\n${autoFormattingEdits}\n\n(Note: Pay close attention to changes such as single quotes being converted to double quotes, semicolons being removed or added, long lines being broken into multiple lines, adjusting indentation style, adding/removing trailing commas, etc. This will help you ensure future SEARCH/REPLACE operations to this file are accurate.)\n\n`
+												: "") +
+											`Here is the full, updated content of the file that was saved:\n\n` +
+											`<final_file_content path="${relPath.toPosix()}">\n${finalContent}\n</final_file_content>\n\n` +
+											`IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.\n\n` +
+											`${newProblemsMessage}`,
+									)
+								}
+								await this.diffViewProvider.reset()
+								break
+							}
+						} catch (error) {
+							await handleError("writing file", error)
+							await this.diffViewProvider.revertChanges()
+							await this.diffViewProvider.reset()
+							break
+						}
+					}
+					case "read_file": {
+						const relPath: string | undefined = block.params.path
+						const sharedMessageProps: ClineSayTool = {
+							tool: "readFile",
+							path: getReadablePath(cwd, removeClosingTag("path", relPath)),
+						}
+						try {
+							if (block.partial) {
+								const partialMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: undefined,
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", partialMessage, undefined, block.partial)
+								} else {
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									await this.ask("tool", partialMessage, block.partial).catch(() => {})
+								}
+								break
+							} else {
+								if (!relPath) {
+									this.consecutiveMistakeCount++
+									pushToolResult(await this.sayAndCreateMissingParamError("read_file", "path"))
+									break
+								}
+								this.consecutiveMistakeCount = 0
+								const absolutePath = path.resolve(cwd, relPath)
+								const completeMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: absolutePath,
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", completeMessage, undefined, false) // need to be sending partialValue bool, since undefined has its own purpose in that the message is treated neither as a partial or completion of a partial, but as a single complete message
+									this.consecutiveAutoApprovedRequestsCount++
+								} else {
+									showNotificationForApprovalIfAutoApprovalEnabled(
+										`Cline wants to read ${path.basename(absolutePath)}`,
+									)
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									const didApprove = await askApproval("tool", completeMessage)
+									if (!didApprove) {
+										break
+									}
+								}
+								// now execute the tool like normal
+								const content = await extractTextFromFile(absolutePath)
+								pushToolResult(content)
+								break
+							}
+						} catch (error) {
+							await handleError("reading file", error)
+							break
+						}
+					}
+					case "list_files": {
+						const relDirPath: string | undefined = block.params.path
+						const recursiveRaw: string | undefined = block.params.recursive
+						const recursive = recursiveRaw?.toLowerCase() === "true"
+						const sharedMessageProps: ClineSayTool = {
+							tool: !recursive ? "listFilesTopLevel" : "listFilesRecursive",
+							path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
+						}
+						try {
+							if (block.partial) {
+								const partialMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: "",
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", partialMessage, undefined, block.partial)
+								} else {
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									await this.ask("tool", partialMessage, block.partial).catch(() => {})
+								}
+								break
+							} else {
+								if (!relDirPath) {
+									this.consecutiveMistakeCount++
+									pushToolResult(await this.sayAndCreateMissingParamError("list_files", "path"))
+									break
+								}
+								this.consecutiveMistakeCount = 0
+								const absolutePath = path.resolve(cwd, relDirPath)
+								const [files, didHitLimit] = await listFiles(absolutePath, recursive, 200)
+								const result = formatResponse.formatFilesList(absolutePath, files, didHitLimit)
+								const completeMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: result,
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", completeMessage, undefined, false)
+									this.consecutiveAutoApprovedRequestsCount++
+								} else {
+									showNotificationForApprovalIfAutoApprovalEnabled(
+										`Cline wants to view directory ${path.basename(absolutePath)}/`,
+									)
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									const didApprove = await askApproval("tool", completeMessage)
+									if (!didApprove) {
+										break
+									}
+								}
+								pushToolResult(result)
+								break
+							}
+						} catch (error) {
+							await handleError("listing files", error)
+							break
+						}
+					}
+					case "list_code_definition_names": {
+						const relDirPath: string | undefined = block.params.path
+						const sharedMessageProps: ClineSayTool = {
+							tool: "listCodeDefinitionNames",
+							path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
+						}
+						try {
+							if (block.partial) {
+								const partialMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: "",
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", partialMessage, undefined, block.partial)
+								} else {
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									await this.ask("tool", partialMessage, block.partial).catch(() => {})
+								}
+								break
+							} else {
+								if (!relDirPath) {
+									this.consecutiveMistakeCount++
+									pushToolResult(
+										await this.sayAndCreateMissingParamError("list_code_definition_names", "path"),
+									)
+									break
+								}
+								this.consecutiveMistakeCount = 0
+								const absolutePath = path.resolve(cwd, relDirPath)
+								const result = await parseSourceCodeForDefinitionsTopLevel(absolutePath)
+								const completeMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: result,
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", completeMessage, undefined, false)
+									this.consecutiveAutoApprovedRequestsCount++
+								} else {
+									showNotificationForApprovalIfAutoApprovalEnabled(
+										`Cline wants to view source code definitions in ${path.basename(absolutePath)}/`,
+									)
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									const didApprove = await askApproval("tool", completeMessage)
+									if (!didApprove) {
+										break
+									}
+								}
+								pushToolResult(result)
+								break
+							}
+						} catch (error) {
+							await handleError("parsing source code definitions", error)
+							break
+						}
+					}
+					case "search_files": {
+						const relDirPath: string | undefined = block.params.path
+						const regex: string | undefined = block.params.regex
+						const filePattern: string | undefined = block.params.file_pattern
+						const sharedMessageProps: ClineSayTool = {
+							tool: "searchFiles",
+							path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
+							regex: removeClosingTag("regex", regex),
+							filePattern: removeClosingTag("file_pattern", filePattern),
+						}
+						try {
+							if (block.partial) {
+								const partialMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: "",
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", partialMessage, undefined, block.partial)
+								} else {
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									await this.ask("tool", partialMessage, block.partial).catch(() => {})
+								}
+								break
+							} else {
+								if (!relDirPath) {
+									this.consecutiveMistakeCount++
+									pushToolResult(await this.sayAndCreateMissingParamError("search_files", "path"))
+									break
+								}
+								if (!regex) {
+									this.consecutiveMistakeCount++
+									pushToolResult(await this.sayAndCreateMissingParamError("search_files", "regex"))
+									break
+								}
+								this.consecutiveMistakeCount = 0
+								const absolutePath = path.resolve(cwd, relDirPath)
+								const results = await regexSearchFiles(cwd, absolutePath, regex, filePattern)
+								const completeMessage = JSON.stringify({
+									...sharedMessageProps,
+									content: results,
+								} satisfies ClineSayTool)
+								if (this.shouldAutoApproveTool(block.name)) {
+									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+									await this.say("tool", completeMessage, undefined, false)
+									this.consecutiveAutoApprovedRequestsCount++
+								} else {
+									showNotificationForApprovalIfAutoApprovalEnabled(
+										`Cline wants to search files in ${path.basename(absolutePath)}/`,
+									)
+									this.removeLastPartialMessageIfExistsWithType("say", "tool")
+									const didApprove = await askApproval("tool", completeMessage)
+									if (!didApprove) {
+										break
+									}
+								}
+								pushToolResult(results)
+								break
+							}
+						} catch (error) {
+							await handleError("searching files", error)
+							break
+						}
+					}
+					case "browser_action": {
+						const action: BrowserAction | undefined = block.params.action as BrowserAction
+						const url: string | undefined = block.params.url
+						const coordinate: string | undefined = block.params.coordinate
+						const text: string | undefined = block.params.text
+						if (!action || !browserActions.includes(action)) {
+							// checking for action to ensure it is complete and valid
+							if (!block.partial) {
+								// if the block is complete and we don't have a valid action this is a mistake
+								this.consecutiveMistakeCount++
+								pushToolResult(await this.sayAndCreateMissingParamError("browser_action", "action"))
+								await this.browserSession.closeBrowser()
+							}
+							break
+						}
 
                                                 try {
                                                         if (block.partial) {

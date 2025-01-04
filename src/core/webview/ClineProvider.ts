@@ -31,14 +31,15 @@ https://github.com/KumarVariable/vscode-extension-sidebar-html/blob/master/src/c
 */
 
 type SecretKey =
-        | "apiKey"
-        | "openRouterApiKey"
-        | "awsAccessKey"
-        | "awsSecretKey"
-        | "awsSessionToken"
-        | "openAiApiKey"
-        | "geminiApiKey"
-        | "openAiNativeApiKey"
+	| "apiKey"
+	| "openRouterApiKey"
+	| "awsAccessKey"
+	| "awsSecretKey"
+	| "awsSessionToken"
+	| "openAiApiKey"
+	| "geminiApiKey"
+	| "openAiNativeApiKey"
+	| "deepSeekApiKey"
 type GlobalStateKey =
         | "apiProvider"
         | "apiModelId"
@@ -379,6 +380,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                                                                 anthropicBaseUrl,
                                                                 geminiApiKey,
                                                                 openAiNativeApiKey,
+								deepSeekApiKey,
                                                                 azureApiVersion,
                                                                 openRouterModelId,
                                                                 openRouterModelInfo,
@@ -404,6 +406,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                                                         await this.updateGlobalState("anthropicBaseUrl", anthropicBaseUrl)
                                                         await this.storeSecret("geminiApiKey", geminiApiKey)
                                                         await this.storeSecret("openAiNativeApiKey", openAiNativeApiKey)
+							await this.storeSecret("deepSeekApiKey", deepSeekApiKey)
                                                         await this.updateGlobalState("azureApiVersion", azureApiVersion)
                                                         await this.updateGlobalState("openRouterModelId", openRouterModelId)
                                                         await this.updateGlobalState("openRouterModelInfo", openRouterModelInfo)
@@ -690,46 +693,53 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                                                 description: rawModel.description,
                                         }
 
-                                        switch (rawModel.id) {
-                                                case "anthropic/claude-3.5-sonnet":
-                                                case "anthropic/claude-3.5-sonnet:beta":
-                                                        // NOTE: this needs to be synced with api.ts/openrouter default model info
-                                                        modelInfo.supportsComputerUse = true
-                                                        modelInfo.supportsPromptCache = true
-                                                        modelInfo.cacheWritesPrice = 3.75
-                                                        modelInfo.cacheReadsPrice = 0.3
-                                                        break
-                                                case "anthropic/claude-3.5-sonnet-20240620":
-                                                case "anthropic/claude-3.5-sonnet-20240620:beta":
-                                                        modelInfo.supportsPromptCache = true
-                                                        modelInfo.cacheWritesPrice = 3.75
-                                                        modelInfo.cacheReadsPrice = 0.3
-                                                        break
-                                                case "anthropic/claude-3-5-haiku":
-                                                case "anthropic/claude-3-5-haiku:beta":
-                                                case "anthropic/claude-3-5-haiku-20241022":
-                                                case "anthropic/claude-3-5-haiku-20241022:beta":
-                                                case "anthropic/claude-3.5-haiku":
-                                                case "anthropic/claude-3.5-haiku:beta":
-                                                case "anthropic/claude-3.5-haiku-20241022":
-                                                case "anthropic/claude-3.5-haiku-20241022:beta":
-                                                        modelInfo.supportsPromptCache = true
-                                                        modelInfo.cacheWritesPrice = 1.25
-                                                        modelInfo.cacheReadsPrice = 0.1
-                                                        break
-                                                case "anthropic/claude-3-opus":
-                                                case "anthropic/claude-3-opus:beta":
-                                                        modelInfo.supportsPromptCache = true
-                                                        modelInfo.cacheWritesPrice = 18.75
-                                                        modelInfo.cacheReadsPrice = 1.5
-                                                        break
-                                                case "anthropic/claude-3-haiku":
-                                                case "anthropic/claude-3-haiku:beta":
-                                                        modelInfo.supportsPromptCache = true
-                                                        modelInfo.cacheWritesPrice = 0.3
-                                                        modelInfo.cacheReadsPrice = 0.03
-                                                        break
-                                        }
+					switch (rawModel.id) {
+						case "anthropic/claude-3.5-sonnet":
+						case "anthropic/claude-3.5-sonnet:beta":
+							// NOTE: this needs to be synced with api.ts/openrouter default model info
+							modelInfo.supportsComputerUse = true
+							modelInfo.supportsPromptCache = true
+							modelInfo.cacheWritesPrice = 3.75
+							modelInfo.cacheReadsPrice = 0.3
+							break
+						case "anthropic/claude-3.5-sonnet-20240620":
+						case "anthropic/claude-3.5-sonnet-20240620:beta":
+							modelInfo.supportsPromptCache = true
+							modelInfo.cacheWritesPrice = 3.75
+							modelInfo.cacheReadsPrice = 0.3
+							break
+						case "anthropic/claude-3-5-haiku":
+						case "anthropic/claude-3-5-haiku:beta":
+						case "anthropic/claude-3-5-haiku-20241022":
+						case "anthropic/claude-3-5-haiku-20241022:beta":
+						case "anthropic/claude-3.5-haiku":
+						case "anthropic/claude-3.5-haiku:beta":
+						case "anthropic/claude-3.5-haiku-20241022":
+						case "anthropic/claude-3.5-haiku-20241022:beta":
+							modelInfo.supportsPromptCache = true
+							modelInfo.cacheWritesPrice = 1.25
+							modelInfo.cacheReadsPrice = 0.1
+							break
+						case "anthropic/claude-3-opus":
+						case "anthropic/claude-3-opus:beta":
+							modelInfo.supportsPromptCache = true
+							modelInfo.cacheWritesPrice = 18.75
+							modelInfo.cacheReadsPrice = 1.5
+							break
+						case "anthropic/claude-3-haiku":
+						case "anthropic/claude-3-haiku:beta":
+							modelInfo.supportsPromptCache = true
+							modelInfo.cacheWritesPrice = 0.3
+							modelInfo.cacheReadsPrice = 0.03
+							break
+						case "deepseek/deepseek-chat":
+							modelInfo.supportsPromptCache = true
+							// see api.ts/deepSeekModels for more info
+							modelInfo.inputPrice = 0
+							modelInfo.cacheWritesPrice = 0.14
+							modelInfo.cacheReadsPrice = 0.014
+							break
+					}
 
                                         models[rawModel.id] = modelInfo
                                 }
@@ -923,6 +933,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                         anthropicBaseUrl,
                         geminiApiKey,
                         openAiNativeApiKey,
+			deepSeekApiKey,
                         azureApiVersion,
                         openRouterModelId,
                         openRouterModelInfo,
@@ -953,6 +964,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                         this.getGlobalState("anthropicBaseUrl") as Promise<string | undefined>,
                         this.getSecret("geminiApiKey") as Promise<string | undefined>,
                         this.getSecret("openAiNativeApiKey") as Promise<string | undefined>,
+			this.getSecret("deepSeekApiKey") as Promise<string | undefined>,
                         this.getGlobalState("azureApiVersion") as Promise<string | undefined>,
                         this.getGlobalState("openRouterModelId") as Promise<string | undefined>,
                         this.getGlobalState("openRouterModelInfo") as Promise<ModelInfo | undefined>,
@@ -1000,6 +1012,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                                 anthropicBaseUrl,
                                 geminiApiKey,
                                 openAiNativeApiKey,
+				deepSeekApiKey,
                                 azureApiVersion,
                                 openRouterModelId,
                                 openRouterModelInfo,
@@ -1070,30 +1083,31 @@ export class ClineProvider implements vscode.WebviewViewProvider {
 
         // dev
 
-        async resetState() {
-                vscode.window.showInformationMessage("Resetting state...")
-                for (const key of this.context.globalState.keys()) {
-                        await this.context.globalState.update(key, undefined)
-                }
-                const secretKeys: SecretKey[] = [
-                        "apiKey",
-                        "openRouterApiKey",
-                        "awsAccessKey",
-                        "awsSecretKey",
-                        "awsSessionToken",
-                        "openAiApiKey",
-                        "geminiApiKey",
-                        "openAiNativeApiKey",
-                ]
-                for (const key of secretKeys) {
-                        await this.storeSecret(key, undefined)
-                }
-                if (this.cline) {
-                        this.cline.abortTask()
-                        this.cline = undefined
-                }
-                vscode.window.showInformationMessage("State reset")
-                await this.postStateToWebview()
-                await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
-        }
+	async resetState() {
+		vscode.window.showInformationMessage("Resetting state...")
+		for (const key of this.context.globalState.keys()) {
+			await this.context.globalState.update(key, undefined)
+		}
+		const secretKeys: SecretKey[] = [
+			"apiKey",
+			"openRouterApiKey",
+			"awsAccessKey",
+			"awsSecretKey",
+			"awsSessionToken",
+			"openAiApiKey",
+			"geminiApiKey",
+			"openAiNativeApiKey",
+			"deepSeekApiKey",
+		]
+		for (const key of secretKeys) {
+			await this.storeSecret(key, undefined)
+		}
+		if (this.cline) {
+			this.cline.abortTask()
+			this.cline = undefined
+		}
+		vscode.window.showInformationMessage("State reset")
+		await this.postStateToWebview()
+		await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+	}
 }
